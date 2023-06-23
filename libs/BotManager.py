@@ -53,8 +53,14 @@ class _BotDatabaseObject(object):
         """Converts class name from camel case to snake case"""
         name = self.__name__
         return str(
-            name[0].lower()
-            + re.sub(r"([A-Z])", lambda letter: "_" + letter.group(0).lower(), name[1:])
+            (
+                name[0].lower()
+                + re.sub(
+                    r"([A-Z])",
+                    lambda letter: f"_{letter.group(0).lower()}",
+                    name[1:],
+                )
+            )
         )
 
     id = Column(Integer, primary_key=True, unique=True, nullable=False)
@@ -115,8 +121,8 @@ class BotManager(object):
         if os.path.exists(options.botnet_db):
             os.remove(options.botnet_db)
             logging.debug("Removing old botnet database file")
-        self.db_path = "sqlite:///%s" % options.botnet_db
-        logging.debug("Created botnet database at: %s" % self.db_path)
+        self.db_path = f"sqlite:///{options.botnet_db}"
+        logging.debug(f"Created botnet database at: {self.db_path}")
         self.sqlite_engine = create_engine(self.db_path, echo=options.log_sql)
         Session = sessionmaker(bind=self.sqlite_engine, autocommit=True)
         self.botdb = Session(autoflush=True)
@@ -138,9 +144,7 @@ class BotManager(object):
         from models.Team import Team
 
         teams = Team.all()
-        botcount = {}
-        for team in teams:
-            botcount[team.uuid] = 0
+        botcount = {team.uuid: 0 for team in teams}
         for bot in self.botdb.query(Bot).all():
             botcount[bot.team_uuid] += 1
         return botcount
@@ -186,7 +190,7 @@ class BotManager(object):
             from models.Team import Team
 
             team = Team.by_uuid(bot.team_uuid)
-            logging.debug("Removing bot '%s' at %s" % (bot.team_uuid, bot.remote_ip))
+            logging.debug(f"Removing bot '{bot.team_uuid}' at {bot.remote_ip}")
             self.botnet.pop(bot_wsocket.uuid, None)
             self.botdb.delete(bot)
             self.botdb.flush()
@@ -194,7 +198,7 @@ class BotManager(object):
             self.notify_monitors(team.name)
         else:
             logging.warning(
-                "Failed to remove bot '%s' does not exist in manager" % bot_wsocket.uuid
+                f"Failed to remove bot '{bot_wsocket.uuid}' does not exist in manager"
             )
 
     def is_duplicate(self, bot_wsocket):
@@ -202,8 +206,7 @@ class BotManager(object):
         assert bot_wsocket.team_uuid is not None
         assert bot_wsocket.box_uuid is not None
         return (
-            0
-            < self.botdb.query(Bot)
+            self.botdb.query(Bot)
             .filter(
                 and_(
                     Bot.team_uuid == str(bot_wsocket.team_uuid),
@@ -211,6 +214,7 @@ class BotManager(object):
                 )
             )
             .count()
+            > 0
         )
 
     def add_monitor(self, monitor_wsocket):
@@ -229,8 +233,8 @@ class BotManager(object):
 
     def notify_monitors(self, team_name):
         """Update team monitors"""
-        if team_name in self.monitors and 0 < len(self.monitors[team_name]):
-            logging.debug("Sending update to %s" % team_name)
+        if team_name in self.monitors and len(self.monitors[team_name]) > 0:
+            logging.debug(f"Sending update to {team_name}")
             bots = self.get_bots(team_name)
             for monitor in self.monitors[team_name]:
                 monitor.update(bots)

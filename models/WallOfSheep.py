@@ -80,16 +80,15 @@ class WallOfSheep(DatabaseObject):
         number of password they've cracked
         """
         orders = {"passwords": 1, "cash": 2}
-        leaders = []
-        for user in User.all_users():
-            if 0 < cls.count_cracked_by(user.id):
-                leaders.append(
-                    (
-                        user,
-                        cls.count_cracked_by(user.id),
-                        sum(cls.by_cracker_id(user.id)),
-                    )
-                )
+        leaders = [
+            (
+                user,
+                cls.count_cracked_by(user.id),
+                sum(cls.by_cracker_id(user.id)),
+            )
+            for user in User.all_users()
+            if cls.count_cracked_by(user.id) > 0
+        ]
         if order_by not in orders:
             order_by = "passwords"
         leaders.sort(key=lambda stats: stats[orders[order_by]], reverse=True)

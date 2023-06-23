@@ -98,11 +98,7 @@ class CodeFlowHandler(BaseHandler):
         # Admin is defined by the Azure AD AppRole "Admin"
         hasAdminRole = self.is_admin(claims)
 
-        # Get the team code (if set) would have come from the Join Team page.
-        team_code = None
-        if "teamcode" in code_flow:
-            team_code = code_flow["teamcode"]
-
+        team_code = code_flow["teamcode"] if "teamcode" in code_flow else None
         # Look up user the Azure AD object id (Guid)
         user = User.by_uuid(claims["oid"])
 
@@ -134,10 +130,7 @@ class CodeFlowHandler(BaseHandler):
         self.session["handle"] = user.handle
         self.session["theme"] = [str(f) for f in theme.files]
         self.session["theme_id"] = int(theme.id)
-        if user.is_admin():
-            self.session["menu"] = "admin"
-        else:
-            self.session["menu"] = "user"
+        self.session["menu"] = "admin" if user.is_admin() else "user"
         self.session.save()
 
     # Admin is defined by the Azure AD AppRole "Admin"
@@ -172,8 +165,10 @@ class CodeFlowHandler(BaseHandler):
         user.handle = claims["preferred_username"].split("@")[0]
         # Generate a long random password that the user will never know or use.
         user.password = "".join(
-            random.choice(string.ascii_letters + string.digits + string.punctuation)
-            for i in range(30)
+            random.choice(
+                string.ascii_letters + string.digits + string.punctuation
+            )
+            for _ in range(30)
         )
         user.bank_password = ""
         user.name = claims["name"]
@@ -212,13 +207,12 @@ class LoginHandler(BaseHandler):
         """Display the login page"""
         if self.session is not None:
             self.redirect("/user")
+        elif options.auth == "azuread":
+            code_flow = self.build_auth_code_flow()
+            self.memcached.add(code_flow["state"], code_flow)
+            self.redirect(code_flow["auth_uri"])
         else:
-            if options.auth == "azuread":
-                code_flow = self.build_auth_code_flow()
-                self.memcached.add(code_flow["state"], code_flow)
-                self.redirect(code_flow["auth_uri"])
-            else:
-                self.render("public/login.html", info=None, errors=None)
+            self.render("public/login.html", info=None, errors=None)
 
     @blacklist_ips
     def post(self, *args, **kwargs):
@@ -227,26 +221,25 @@ class LoginHandler(BaseHandler):
         password_attempt = self.get_argument("password", "")
         if user is None:
             user = User.by_email(self.get_argument("account", ""))
-        if user is not None:
-            if self.config.use_recaptcha and self.verify_recaptcha() is False:
-                self.render(
-                    "public/login.html",
-                    info=None,
-                    errors=["Invalid reCAPTCHA, try again"],
-                )
-            elif user.validate_password(password_attempt):
-                self.valid_login(user)
-            else:
-                self.failed_login()
-        else:
+        if user is None:
             if password_attempt is not None:
                 PBKDF2.crypt(password_attempt, "BurnTheHashTime")
             self.failed_login()
 
+        elif self.config.use_recaptcha and self.verify_recaptcha() is False:
+            self.render(
+                "public/login.html",
+                info=None,
+                errors=["Invalid reCAPTCHA, try again"],
+            )
+        elif user.validate_password(password_attempt):
+            self.valid_login(user)
+        else:
+            self.failed_login()
+
     def verify_recaptcha(self):
         """Checks recaptcha"""
-        recaptcha_response = self.get_argument("g-recaptcha-response", None)
-        if recaptcha_response:
+        if recaptcha_response := self.get_argument("g-recaptcha-response", None):
             recaptcha_req_data = {
                 "secret": self.config.recaptcha_secret_key,
                 "remoteip": self.request.remote_ip,
@@ -255,18 +248,16 @@ class LoginHandler(BaseHandler):
 
             recaptcha_req_body = urlencode(recaptcha_req_data).encode("utf-8")
             request = urlrequest.Request(self.RECAPTCHA_URL, recaptcha_req_body)
-            response = urlrequest.urlopen(request)
-            if response:
+            if response := urlrequest.urlopen(request):
                 result = json.loads(response.read())
                 if result["success"]:
                     return True
         return False
 
     def build_auth_code_flow(self):
-        codeflow = azuread_app.initiate_auth_code_flow(
+        return azuread_app.initiate_auth_code_flow(
             ["email"], redirect_uri=options.redirect_url
         )
-        return codeflow
 
     def allowed_ip(self):
         return (
@@ -283,8 +274,7 @@ class LoginHandler(BaseHandler):
                 errors=None,
             )
             logging.warning(
-                "Admin login - invalid IP %s.  Valid: %s"
-                % (self.request.remote_ip, ",".join(options.admin_ips))
+                f'Admin login - invalid IP {self.request.remote_ip}.  Valid: {",".join(options.admin_ips)}'
             )
         elif (
             options.require_email
@@ -314,9 +304,7 @@ class LoginHandler(BaseHandler):
 
     def successful_login(self, user):
         """Called when a user successfully logs in"""
-        logging.info(
-            "Successful login: %s from %s" % (user.handle, self.request.remote_ip)
-        )
+        logging.info(f"Successful login: {user.handle} from {self.request.remote_ip}")
         user.last_login = datetime.now()
         user.logins += 1
         self.dbsession.add(user)
@@ -330,16 +318,13 @@ class LoginHandler(BaseHandler):
         self.session["handle"] = user.handle
         self.session["theme"] = [str(f) for f in theme.files]
         self.session["theme_id"] = int(theme.id)
-        if user.is_admin():
-            self.session["menu"] = "admin"
-        else:
-            self.session["menu"] = "user"
+        self.session["menu"] = "admin" if user.is_admin() else "user"
         self.session.save()
 
     def failed_login(self):
         """Called if username/password is invalid"""
         ip = self.request.remote_ip
-        logging.info("*** Failed login attempt from: %s" % ip)
+        logging.info(f"*** Failed login attempt from: {ip}")
         failed_logins = self.application.settings["failed_logins"]
         if ip in failed_logins:
             failed_logins[ip] += 1
@@ -350,7 +335,7 @@ class LoginHandler(BaseHandler):
             self.application.settings["automatic_ban"]
             and threshold <= failed_logins[ip]
         ):
-            logging.info("[BAN HAMMER] Automatically banned IP: %s" % ip)
+            logging.info(f"[BAN HAMMER] Automatically banned IP: {ip}")
             try:
                 if not IPAddress(ip).is_loopback():
                     self.application.settings["blacklisted_ips"].append(ip)
@@ -433,57 +418,40 @@ class RegistrationHandler(BaseHandler):
 
     def form_validation(self):
         unicodewd = "ªµºÀ-ÖØ-öø-ˁˆ-ˑˠ-ˤˬˮͰ-ʹͶͷͺ-ͽͿΆΈ-ΊΌΎ-ΡΣ-ϵϷ-ҁҊ-ԯԱ-Ֆՙՠ-ֈא-תׯ-ײؠ-يٮٯٱ-ۓەۥۦۮۯۺ-ۼۿܐܒ-ܯݍ-ޥޱߊ-ߪߴߵߺࠀ-ࠕࠚࠤࠨࡀ-ࡘࡠ-ࡪࡰ-ࢇࢉ-ࢎࢠ-ࣉऄ-हऽॐक़-ॡॱ-ঀঅ-ঌএঐও-নপ-রলশ-হঽৎড়ঢ়য়-ৡৰৱৼਅ-ਊਏਐਓ-ਨਪ-ਰਲਲ਼ਵਸ਼ਸਹਖ਼-ੜਫ਼ੲ-ੴઅ-ઍએ-ઑઓ-નપ-રલળવ-હઽૐૠૡૹଅ-ଌଏଐଓ-ନପ-ରଲଳଵ-ହଽଡ଼ଢ଼ୟ-ୡୱஃஅ-ஊஎ-ஐஒ-கஙசஜஞடணதந-பம-ஹௐఅ-ఌఎ-ఐఒ-నప-హఽౘ-ౚౝౠౡಀಅ-ಌಎ-ಐಒ-ನಪ-ಳವ-ಹಽೝೞೠೡೱೲഄ-ഌഎ-ഐഒ-ഺഽൎൔ-ൖൟ-ൡൺ-ൿඅ-ඖක-නඳ-රලව-ෆก-ะาำเ-ๆກຂຄຆ-ຊຌ-ຣລວ-ະາຳຽເ-ໄໆໜ-ໟༀཀ-ཇཉ-ཬྈ-ྌက-ဪဿၐ-ၕၚ-ၝၡၥၦၮ-ၰၵ-ႁႎႠ-ჅჇჍა-ჺჼ-ቈቊ-ቍቐ-ቖቘቚ-ቝበ-ኈኊ-ኍነ-ኰኲ-ኵኸ-ኾዀዂ-ዅወ-ዖዘ-ጐጒ-ጕጘ-ፚᎀ-ᎏᎠ-Ᏽᏸ-ᏽᐁ-ᙬᙯ-ᙿᚁ-ᚚᚠ-ᛪᛱ-ᛸᜀ-ᜑᜟ-ᜱᝀ-ᝑᝠ-ᝬᝮ-ᝰក-ឳៗៜᠠ-ᡸᢀ-ᢄᢇ-ᢨᢪᢰ-ᣵᤀ-ᤞᥐ-ᥭᥰ-ᥴᦀ-ᦫᦰ-ᧉᨀ-ᨖᨠ-ᩔᪧᬅ-ᬳᭅ-ᭌᮃ-ᮠᮮᮯᮺ-ᯥᰀ-ᰣᱍ-ᱏᱚ-ᱽᲀ-ᲈᲐ-ᲺᲽ-Ჿᳩ-ᳬᳮ-ᳳᳵᳶᳺᴀ-ᶿḀ-ἕἘ-Ἕἠ-ὅὈ-Ὅὐ-ὗὙὛὝὟ-ώᾀ-ᾴᾶ-ᾼιῂ-ῄῆ-ῌῐ-ΐῖ-Ίῠ-Ῥῲ-ῴῶ-ῼⁱⁿₐ-ₜℂℇℊ-ℓℕℙ-ℝℤΩℨK-ℭℯ-ℹℼ-ℿⅅ-ⅉⅎↃↄⰀ-ⳤⳫ-ⳮⳲⳳⴀ-ⴥⴧⴭⴰ-ⵧⵯⶀ-ⶖⶠ-ⶦⶨ-ⶮⶰ-ⶶⶸ-ⶾⷀ-ⷆⷈ-ⷎⷐ-ⷖⷘ-ⷞⸯ々〆〱-〵〻〼ぁ-ゖゝ-ゟァ-ヺー-ヿㄅ-ㄯㄱ-ㆎㆠ-ㆿㇰ-ㇿ㐀-䶿一-ꒌꓐ-ꓽꔀ-ꘌꘐ-ꘟꘪꘫꙀ-ꙮꙿ-ꚝꚠ-ꛥꜗ-ꜟꜢ-ꞈꞋ-ꟊꟐꟑꟓꟕ-ꟙꟲ-ꠁꠃ-ꠅꠇ-ꠊꠌ-ꠢꡀ-ꡳꢂ-ꢳꣲ-ꣷꣻꣽꣾꤊ-ꤥꤰ-ꥆꥠ-ꥼꦄ-ꦲꧏꧠ-ꧤꧦ-ꧯꧺ-ꧾꨀ-ꨨꩀ-ꩂꩄ-ꩋꩠ-ꩶꩺꩾ-ꪯꪱꪵꪶꪹ-ꪽꫀꫂꫛ-ꫝꫠ-ꫪꫲ-ꫴꬁ-ꬆꬉ-ꬎꬑ-ꬖꬠ-ꬦꬨ-ꬮꬰ-ꭚꭜ-ꭩꭰ-ꯢ가-힣ힰ-ퟆퟋ-ퟻ豈-舘並-龎ﬀ-ﬆﬓ-ﬗיִײַ-ﬨשׁ-זּטּ-לּמּנּסּףּפּצּ-ﮱﯓ-ﴽﵐ-ﶏﶒ-ﷇﷰ-ﷻﹰ-ﹴﹶ-ﻼＡ-Ｚａ-ｚｦ-ﾾￂ-ￇￊ-ￏￒ-ￗￚ-ￜ"
-        if (
-            bool(re.match(r"^[a-zA-Z0-9_\-\.]{3,16}$", self.get_argument("handle", "")))
-            is False
+        if not bool(
+            re.match(r"^[a-zA-Z0-9_\-\.]{3,16}$", self.get_argument("handle", ""))
         ):
             raise ValidationError("Invalid handle format")
         email = self.get_argument("email", None)
-        if options.require_email and (not email or not len(email) > 0):
+        if options.require_email and (not email or len(email) <= 0):
             raise ValidationError("Email address is required")
-        if (
-            email
-            and bool(
-                re.match(
-                    r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
-                    self.get_argument("email", ""),
-                )
+        if email and not bool(
+            re.match(
+                r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
+                self.get_argument("email", ""),
             )
-            is False
         ):
             raise ValidationError("Invalid email format")
-        if (
-            self.get_argument("playername", None)
-            and bool(
-                re.match(
-                    r"^[0-9A-Za-z %s]{3,64}$" % unicodewd,
-                    self.get_argument("playername", ""),
-                    re.UNICODE,
-                )
+        if self.get_argument("playername", None) and not bool(
+            re.match(
+                r"^[0-9A-Za-z %s]{3,64}$" % unicodewd,
+                self.get_argument("playername", ""),
+                re.UNICODE,
             )
-            is False
         ):
             raise ValidationError("Invalid playername format")
-        if (
-            self.get_argument("team-name", None)
-            and bool(
-                re.match(
-                    r"^[0-9A-Za-z _\-\.]{3,24}$", self.get_argument("team-name", "")
-                )
+        if self.get_argument("team-name", None) and not bool(
+            re.match(
+                r"^[0-9A-Za-z _\-\.]{3,24}$", self.get_argument("team-name", "")
             )
-            is False
         ):
             raise ValidationError("Invalid Team Name format")
-        if (
-            self.get_argument("motto", None)
-            and bool(
-                re.match(
-                    r"^[0-9A-Za-z _\-\.%s]{,32}$" % unicodewd,
-                    self.get_argument("motto", ""),
-                    re.UNICODE,
-                )
+        if self.get_argument("motto", None) and not bool(
+            re.match(
+                r"^[0-9A-Za-z _\-\.%s]{,32}$" % unicodewd,
+                self.get_argument("motto", ""),
+                re.UNICODE,
             )
-            is False
         ):
             raise ValidationError("Invalid Team Motto format")
         if (
@@ -503,8 +471,7 @@ class RegistrationHandler(BaseHandler):
 
     def verify_recaptcha(self):
         """Checks recaptcha"""
-        recaptcha_response = self.get_argument("g-recaptcha-response", None)
-        if recaptcha_response:
+        if recaptcha_response := self.get_argument("g-recaptcha-response", None):
             recaptcha_req_data = {
                 "secret": self.config.recaptcha_secret_key,
                 "remoteip": self.request.remote_ip,
@@ -513,8 +480,7 @@ class RegistrationHandler(BaseHandler):
 
             recaptcha_req_body = urlencode(recaptcha_req_data).encode("utf-8")
             request = urlrequest.Request(self.RECAPTCHA_URL, recaptcha_req_body)
-            response = urlrequest.urlopen(request)
-            if response:
+            if response := urlrequest.urlopen(request):
                 result = json.loads(response.read())
                 if result["success"]:
                     return True
@@ -580,7 +546,7 @@ class RegistrationHandler(BaseHandler):
             if not team:
                 raise ValidationError("Invalid team code")
             elif self.config.max_team_size <= len(team.members):
-                raise ValidationError("Team %s is already full" % team.name)
+                raise ValidationError(f"Team {team.name} is already full")
             return team
         return self.create_team()
 
@@ -592,9 +558,7 @@ class RegistrationHandler(BaseHandler):
                 team = Team()
                 team.name = self.get_argument("handle", "")
             else:
-                logging.info(
-                    "Team %s already exists - Player Mode: reset team." % team.name
-                )
+                logging.info(f"Team {team.name} already exists - Player Mode: reset team.")
                 team.flags = []
                 team.hints = []
                 team.boxes = []
@@ -657,37 +621,29 @@ class RegistrationHandler(BaseHandler):
                     )
                     smtpObj.starttls()
             except Exception as e:
-                logging.warning("SMTP Failed with Connection issue (%s)." % e)
+                logging.warning(f"SMTP Failed with Connection issue ({e}).")
                 return
             smtpObj.set_debuglevel(False)
             try:
                 try:
                     smtpObj.login(options.mail_username, options.mail_password)
                 except smtplib.SMTPNotSupportedError as e:
-                    logging.warning(
-                        "SMTP Auth issue (%s). Attempting to send anyway." % e
-                    )
+                    logging.warning(f"SMTP Auth issue ({e}). Attempting to send anyway.")
                 smtpObj.sendmail(options.mail_sender, receivers, message)
             finally:
                 smtpObj.quit()
-            if not len(options.mail_host) > 0:
+            if len(options.mail_host) <= 0:
                 logging.info(
                     "Email validation failed: No Mail Host in Configuration. Skipping Validation."
                 )
                 emailtoken.valid = True
             else:
-                logging.info("Email Validation sent for %s" % user.email)
+                logging.info(f"Email Validation sent for {user.email}")
             self.dbsession.add(emailtoken)
             self.dbsession.commit()
-        elif (
-            user is not None
-            and options.require_email
-            and options.validate_email
-            and not len(user.email) > 0
-        ):
+        elif user is not None and options.require_email and options.validate_email:
             logging.info(
-                "Email validation failed: No Email Address for user %s.  Deleting User"
-                % user.handle
+                f"Email validation failed: No Email Address for user {user.handle}.  Deleting User"
             )
             self.dbsession.delete(user)
             self.dbsession.commit()
@@ -708,32 +664,32 @@ class RegistrationHandler(BaseHandler):
             origin = options.origin.replace("wss://", "https://").replace(
                 "ws://", "http://"
             )
-        validate_url = "%s/registration/token?u=%s&t=%s" % (origin, account, token)
+        validate_url = f"{origin}/registration/token?u={account}&t={token}"
         remote_ip = (
             self.request.headers.get("X-Real-IP")
             or self.request.headers.get("X-Forwarded-For")
             or self.request.remote_ip
         )
-        header = []
-        header.append("Subject: %s Email Validation" % options.game_name)
-        header.append("From: %s <%s>" % (options.game_name, options.mail_sender))
-        header.append("To: %s <%s>" % (user.name, user.email))
-        header.append("MIME-Version: 1.0")
-        header.append('Content-Type: text/html; charset="UTF-8"')
-        header.append("Content-Transfer-Encoding: BASE64")
-        header.append("\r\n")
-        header.append("")
-        f = open("templates/public/valid_email.html", "r")
-        template = (
-            f.read()
-            .replace("\n", "")
-            .replace("[Product Name]", options.game_name)
-            .replace("{{name}}", user.name)
-            .replace("{{action_url}}", validate_url)
-            .replace("{{remote_ip}}", remote_ip)
-            .replace("https://example.com", origin)
-        )
-        f.close()
+        header = [
+            f"Subject: {options.game_name} Email Validation",
+            f"From: {options.game_name} <{options.mail_sender}>",
+            f"To: {user.name} <{user.email}>",
+            "MIME-Version: 1.0",
+            'Content-Type: text/html; charset="UTF-8"',
+            "Content-Transfer-Encoding: BASE64",
+            "\r\n",
+            "",
+        ]
+        with open("templates/public/valid_email.html", "r") as f:
+            template = (
+                f.read()
+                .replace("\n", "")
+                .replace("[Product Name]", options.game_name)
+                .replace("{{name}}", user.name)
+                .replace("{{action_url}}", validate_url)
+                .replace("{{remote_ip}}", remote_ip)
+                .replace("https://example.com", origin)
+            )
         try:
             email_msg = "\n".join(header) + b64encode(template)
         except:
@@ -790,7 +746,7 @@ class JoinTeamHandler(BaseHandler):
         if not team:
             raise ValidationError("Invalid team code")
         elif self.config.max_team_size <= len(team.members):
-            raise ValidationError("Team %s is already full" % team.name)
+            raise ValidationError(f"Team {team.name} is already full")
         return teamcode
 
 
@@ -845,16 +801,14 @@ class ForgotPasswordHandler(BaseHandler):
                 try:
                     smtpObj.login(options.mail_username, options.mail_password)
                 except smtplib.SMTPNotSupportedError as e:
-                    logging.warning(
-                        "SMTP Auth issue (%s). Attempting to send anyway." % e
-                    )
+                    logging.warning(f"SMTP Auth issue ({e}). Attempting to send anyway.")
                 smtpObj.sendmail(options.mail_sender, receivers, message)
             finally:
                 smtpObj.quit()
-            logging.info("Password Reset sent for %s" % user.email)
-        elif not len(options.mail_host) > 0:
+            logging.info(f"Password Reset sent for {user.email}")
+        elif len(options.mail_host) <= 0:
             logging.info("Password Reset request failed: No Mail Host in Settings.")
-        elif user is None or not len(user.email) > 0:
+        else:
             logging.info("Password Reset request failed: Email does not exist.")
         self.render(
             "public/forgot.html",
@@ -878,32 +832,32 @@ class ForgotPasswordHandler(BaseHandler):
             origin = options.origin.replace("wss://", "https://").replace(
                 "ws://", "http://"
             )
-        reset_url = "%s/reset/token?u=%s&p=%s" % (origin, account, token)
+        reset_url = f"{origin}/reset/token?u={account}&p={token}"
         remote_ip = (
             self.request.headers.get("X-Real-IP")
             or self.request.headers.get("X-Forwarded-For")
             or self.request.remote_ip
         )
-        header = []
-        header.append("Subject: %s Password Reset" % options.game_name)
-        header.append("From: %s <%s>" % (options.game_name, options.mail_sender))
-        header.append("To: %s <%s>" % (user.name, user.email))
-        header.append("MIME-Version: 1.0")
-        header.append('Content-Type: text/html; charset="UTF-8"')
-        header.append("Content-Transfer-Encoding: BASE64")
-        header.append("\r\n")
-        header.append("")
-        f = open("templates/public/reset_email.html", "r")
-        template = (
-            f.read()
-            .replace("\n", "")
-            .replace("[Product Name]", options.game_name)
-            .replace("{{name}}", user.name)
-            .replace("{{action_url}}", reset_url)
-            .replace("{{remote_ip}}", remote_ip)
-            .replace("https://example.com", origin)
-        )
-        f.close()
+        header = [
+            f"Subject: {options.game_name} Password Reset",
+            f"From: {options.game_name} <{options.mail_sender}>",
+            f"To: {user.name} <{user.email}>",
+            "MIME-Version: 1.0",
+            'Content-Type: text/html; charset="UTF-8"',
+            "Content-Transfer-Encoding: BASE64",
+            "\r\n",
+            "",
+        ]
+        with open("templates/public/reset_email.html", "r") as f:
+            template = (
+                f.read()
+                .replace("\n", "")
+                .replace("[Product Name]", options.game_name)
+                .replace("{{name}}", user.name)
+                .replace("{{action_url}}", reset_url)
+                .replace("{{remote_ip}}", remote_ip)
+                .replace("https://example.com", origin)
+            )
         try:
             email_msg = "\n".join(header) + b64encode(template)
         except:
@@ -960,8 +914,7 @@ class ResetPasswordHandler(BaseHandler):
                 )
 
     def valid_pass_token(self, token, uuid):
-        pass_token = PasswordToken.by_value(token)
-        if pass_token:
+        if pass_token := PasswordToken.by_value(token):
             user = User.by_id(pass_token.user_id)
             if (
                 user
@@ -996,19 +949,18 @@ class ValidEmailHandler(BaseHandler):
                 token = sha256(
                     urlsafe_b64decode(encode(self.get_argument("t", "")))
                 ).hexdigest()
-            user = User.by_uuid(user_uuid)
-            if user:
+            if user := User.by_uuid(user_uuid):
                 if user.is_email_valid() is True:
                     pass
                 elif user.validate_email(token) is True:
-                    info = ["Successfully validated email for %s" % user.handle]
+                    info = [f"Successfully validated email for {user.handle}"]
                     user.locked = False
                     self.dbsession.add(user)
                     self.dbsession.commit()
                     self.event_manager.user_joined_team(user)
                 else:
-                    error = ["Failed to validate email for %s" % user.handle]
-            elif len(user_uuid) > 0 and not user:
+                    error = [f"Failed to validate email for {user.handle}"]
+            elif len(user_uuid) > 0:
                 error = ["Invalid user for email validation"]
             self.render("public/login.html", info=info, errors=error)
         else:

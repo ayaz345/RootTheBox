@@ -104,7 +104,7 @@ class AdminEditUsersHandler(BaseHandler):
                 team.avatar = self.request.files["avatarfile"][0]["body"]
             else:
                 avatar = self.get_argument("avatar", team.avatar)
-                if team.avatar != avatar and avatar != "":
+                if team.avatar != avatar != "":
                     # allow for default without setting
                     team._avatar = avatar
             self.dbsession.add(team)
@@ -122,43 +122,39 @@ class AdminEditUsersHandler(BaseHandler):
                 raise ValidationError("User does not exist")
             handle = self.get_argument("handle", "")
             if user.handle != handle:
-                if User.by_handle(handle) is None:
-                    logging.info("Updated user handle %s -> %s" % (user.handle, handle))
-                    user.handle = handle
-                else:
+                if User.by_handle(handle) is not None:
                     raise ValidationError("Handle is already in use")
+                logging.info(f"Updated user handle {user.handle} -> {handle}")
+                user.handle = handle
             name = self.get_argument("name", "")
             email = self.get_argument("email", "")
             notes = self.get_argument("notes", "")
             expire = self.get_argument("expire", "")
             if user.name != name:
-                logging.info("Updated user Name %s -> %s" % (user.name, name))
+                logging.info(f"Updated user Name {user.name} -> {name}")
                 user.name = name
             if user.email != email:
-                logging.info("Updated user Email %s -> %s" % (user.email, email))
+                logging.info(f"Updated user Email {user.email} -> {email}")
                 user.email = email
             if user.notes != notes:
-                logging.info("Updated user Notes %s -> %s" % (user.notes, notes))
+                logging.info(f"Updated user Notes {user.notes} -> {notes}")
                 user.notes = notes
             if user.expire != expire:
-                logging.info("Updated user Expire %s -> %s" % (user.expire, expire))
+                logging.info(f"Updated user Expire {user.expire} -> {expire}")
                 user.expire = expire
             if options.banking:
                 hash_algorithm = self.get_argument("hash_algorithm", "")
                 if hash_algorithm != user.algorithm:
-                    if hash_algorithm in user.algorithms:
-                        if 0 < len(self.get_argument("bank_password", "")):
-                            logging.info(
-                                "Updated %s's hashing algorithm %s -> %s"
-                                % (user.handle, user.algorithm, hash_algorithm)
-                            )
-                            user.algorithm = hash_algorithm
-                        else:
-                            raise ValidationError(
-                                "You must provide a new bank password when updating the hashing algorithm"
-                            )
-                    else:
+                    if hash_algorithm not in user.algorithms:
                         raise ValidationError("Not a valid hash algorithm")
+                    if len(self.get_argument("bank_password", "")) <= 0:
+                        raise ValidationError(
+                            "You must provide a new bank password when updating the hashing algorithm"
+                        )
+                    logging.info(
+                        f"Updated {user.handle}'s hashing algorithm {user.algorithm} -> {hash_algorithm}"
+                    )
+                    user.algorithm = hash_algorithm
                 if len(self.get_argument("bank_password", "")):
                     user.bank_password = self.get_argument("bank_password", "")
             password = self.get_argument("password", "")
@@ -174,23 +170,20 @@ class AdminEditUsersHandler(BaseHandler):
             team = Team.by_uuid(self.get_argument("team_uuid", ""))
             if team is not None:
                 if user not in team.members:
-                    logging.info(
-                        "Updated %s's team %s -> %s"
-                        % (user.handle, user.team_id, team.name)
-                    )
+                    logging.info(f"Updated {user.handle}'s team {user.team_id} -> {team.name}")
                     user.team_id = team.id
             elif options.teams and admin != "true":
                 raise ValidationError("Please select a valid Team.")
 
             if admin == "true" and not user.is_admin():
-                logging.info("Promoted user %s to Admin" % user.handle)
+                logging.info(f"Promoted user {user.handle} to Admin")
                 permission = Permission()
                 permission.name = ADMIN_PERMISSION
                 permission.user_id = user.id
                 user.team_id = None
                 self.dbsession.add(permission)
             elif admin == "false" and user.is_admin():
-                logging.info("Demoted user %s to Player" % user.handle)
+                logging.info(f"Demoted user {user.handle} to Player")
                 if user == self.get_current_user():
                     self.render(
                         "admin/view/users.html", errors=["You cannont demote yourself."]
@@ -253,10 +246,9 @@ class AdminDeleteUsersHandler(BaseHandler):
         elif user == self.get_current_user():
             self.render("admin/view/users.html", errors=["You cannot delete yourself."])
         else:
-            logging.info("Deleted User: '%s'" % str(user.handle))
+            logging.info(f"Deleted User: '{str(user.handle)}'")
             EventManager.instance().deauth(user)
-            tokens = EmailToken.by_user_id(user.id, all=True)
-            if tokens:
+            if tokens := EmailToken.by_user_id(user.id, all=True):
                 for token in tokens:
                     self.dbsession.delete(token)
                 self.dbsession.commit()
@@ -271,17 +263,16 @@ class AdminDeleteUsersHandler(BaseHandler):
         """
         team = Team.by_uuid(self.get_argument("uuid", ""))
         if team is not None:
-            logging.info("Deleted Team: '%s'" % str(team.name))
+            logging.info(f"Deleted Team: '{str(team.name)}'")
             for user in team.members:
                 if user == self.get_current_user():
                     self.render(
                         "admin/view/users.html",
-                        errors=["Unable to delete user %s" % user.handle],
+                        errors=[f"Unable to delete user {user.handle}"],
                     )
                     return
                 EventManager.instance().deauth(user)
-                tokens = EmailToken.by_user_id(user.id, all=True)
-                if tokens:
+                if tokens := EmailToken.by_user_id(user.id, all=True):
                     for token in tokens:
                         self.dbsession.delete(token)
                     self.dbsession.commit()
@@ -326,7 +317,7 @@ class AdminBanHammerHandler(BaseHandler):
         try:
             ip = self.get_argument("ip", "")
             if not IPAddress(ip).is_loopback():
-                logging.info("Banned new ip: %s" % ip)
+                logging.info(f"Banned new ip: {ip}")
                 self.application.settings["blacklisted_ips"].append(ip)
         except:
             pass  # Don't care about exceptions here
@@ -338,7 +329,7 @@ class AdminBanHammerHandler(BaseHandler):
             self.application.settings["failed_logins"] = {}
             self.application.settings["blacklisted_ips"] = []
         elif ip in self.application.settings["blacklisted_ips"]:
-            logging.info("Removed ban on ip: %s" % ip)
+            logging.info(f"Removed ban on ip: {ip}")
             self.application.settings["blacklisted_ips"].remove(ip)
         if ip in self.application.settings["failed_logins"]:
             self.application.settings["failed_logins"][ip] = 0
@@ -369,7 +360,7 @@ class AdminLockHandler(BaseHandler):
         """Toggle account lock"""
         user = User.by_uuid(self.get_argument("uuid", ""))
         if user is not None:
-            user.locked = False if user.locked else True
+            user.locked = not user.locked
             self.dbsession.add(user)
             self.dbsession.commit()
             self.event_manager.push_score_update()
@@ -381,10 +372,10 @@ class AdminLockHandler(BaseHandler):
         uuid = self.get_argument("uuid", "")
         corp = Corporation.by_uuid(uuid)
         if corp is not None:
-            corp.locked = False if corp.locked else True
+            corp.locked = not corp.locked
             self.dbsession.add(corp)
             self.dbsession.commit()
-            self.redirect("/admin/view/game_objects#%s" % corp.uuid)
+            self.redirect(f"/admin/view/game_objects#{corp.uuid}")
         else:
             self.render("public/404.html")
 
@@ -392,7 +383,7 @@ class AdminLockHandler(BaseHandler):
         uuid = self.get_argument("uuid", "")
         level = GameLevel.by_uuid(uuid)
         if level is not None:
-            level.locked = False if level.locked else True
+            level.locked = not level.locked
             self.dbsession.add(level)
             self.dbsession.commit()
             self.redirect("/admin/view/game_levels")
@@ -402,36 +393,36 @@ class AdminLockHandler(BaseHandler):
     def lock_box(self):
         uuid = self.get_argument("uuid", "")
         box = Box.by_uuid(uuid)
-        if box is not None:
-            if box.locked_corp():
-                self.render(
-                    "admin/view/game_objects.html",
-                    success=None,
-                    errors=["Box Locked by Corporation Lock"],
-                )
-            elif box.locked_level():
-                self.render(
-                    "admin/view/game_objects.html",
-                    success=None,
-                    errors=["Box Locked by Level Lock"],
-                )
-            else:
-                box.locked = False if box.locked else True
-                self.dbsession.add(box)
-                self.dbsession.commit()
-                self.redirect("/admin/view/game_objects#%s" % box.uuid)
-        else:
+        if box is None:
             self.render("public/404.html")
+
+        elif box.locked_corp():
+            self.render(
+                "admin/view/game_objects.html",
+                success=None,
+                errors=["Box Locked by Corporation Lock"],
+            )
+        elif box.locked_level():
+            self.render(
+                "admin/view/game_objects.html",
+                success=None,
+                errors=["Box Locked by Level Lock"],
+            )
+        else:
+            box.locked = not box.locked
+            self.dbsession.add(box)
+            self.dbsession.commit()
+            self.redirect(f"/admin/view/game_objects#{box.uuid}")
 
     def lock_flag(self):
         uuid = self.get_argument("uuid", "")
         print(uuid)
         flag = Flag.by_uuid(uuid)
         if flag is not None:
-            flag.locked = False if flag.locked else True
+            flag.locked = not flag.locked
             self.dbsession.add(flag)
             self.dbsession.commit()
-            self.redirect("/admin/view/game_objects#%s" % flag.uuid)
+            self.redirect(f"/admin/view/game_objects#{flag.uuid}")
         else:
             self.render("public/404.html")
 

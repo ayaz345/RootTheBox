@@ -124,10 +124,11 @@ class BaseHandler(RequestHandler):
 
     def _refresh_csp(self):
         """Rebuild the Content-Security-Policy header"""
-        _csp = []
-        for src, policies in list(self.csp.items()):
-            if len(policies):
-                _csp.append("%s %s; " % (src, " ".join(policies)))
+        _csp = [
+            f'{src} {" ".join(policies)}; '
+            for src, policies in list(self.csp.items())
+            if len(policies)
+        ]
         csp = "".join(_csp)
         # Disabled until i can figure out the bug
         # self.set_header("Content-Security-Policy", csp)
@@ -169,11 +170,10 @@ class BaseHandler(RequestHandler):
             "ip_address": self.request.remote_ip,
         }
         old_session = MemcachedSession.load(**kwargs)
-        if old_session and not old_session.is_expired():
-            old_session.refresh()
-            return old_session
-        else:
+        if not old_session or old_session.is_expired():
             return None
+        old_session.refresh()
+        return old_session
 
     def set_default_headers(self):
         """
@@ -202,13 +202,13 @@ class BaseHandler(RequestHandler):
             # all other '403' cases we just send a redirect to /403
             # self.render('public/403.html', locked=False, xsrf=True)
             self.redirect("/logout")  # just log them out
+        elif self.config.debug:
+            # If debug mode is enabled, just call Tornado's write_error()
+            super(BaseHandler, self).write_error(status_code, **kwargs)
+
         else:
-            if not self.config.debug:
-                # Never tell the user we got a 500
-                self.render("public/404.html")
-            else:
-                # If debug mode is enabled, just call Tornado's write_error()
-                super(BaseHandler, self).write_error(status_code, **kwargs)
+            # Never tell the user we got a 500
+            self.render("public/404.html")
 
     def get(self, *args, **kwargs):
         """Placeholder, in case child class does not impl this method"""
@@ -220,19 +220,19 @@ class BaseHandler(RequestHandler):
 
     def put(self, *args, **kwargs):
         """Log odd behavior, this should never get legitimately called"""
-        logging.warning("%s attempted to use PUT method" % self.request.remote_ip)
+        logging.warning(f"{self.request.remote_ip} attempted to use PUT method")
 
     def delete(self, *args, **kwargs):
         """Log odd behavior, this should never get legitimately called"""
-        logging.warning("%s attempted to use DELETE method" % self.request.remote_ip)
+        logging.warning(f"{self.request.remote_ip} attempted to use DELETE method")
 
     def head(self, *args, **kwargs):
         """Ignore it"""
-        logging.warning("%s attempted to use HEAD method" % self.request.remote_ip)
+        logging.warning(f"{self.request.remote_ip} attempted to use HEAD method")
 
     def options(self, *args, **kwargs):
         """Log odd behavior, this should never get legitimately called"""
-        logging.warning("%s attempted to use OPTIONS method" % self.request.remote_ip)
+        logging.warning(f"{self.request.remote_ip} attempted to use OPTIONS method")
 
     def on_finish(self, *args, **kwargs):
         """Called after a response is sent to the client"""
@@ -278,19 +278,17 @@ class BaseHandler(RequestHandler):
         """
         if len(self.config.force_locale) > 0:
             return locale.get(self.config.force_locale)
-        else:
-            """
+        """
             This is a work around as Tornado get_browser_locale() is not returning the closest match.
             https://github.com/tornadoweb/tornado/issues/1858
             https://github.com/moloch--/RootTheBox/issues/367
             """
-            codes = self.request.headers.get("Accept-Language")
-            if codes:
-                for code in codes.split(","):
-                    code = code.split(";")[0]
-                    for l in locale.get_supported_locales():
-                        if code.lower() == l.split("_")[0]:
-                            return locale.get(l)
+        if codes := self.request.headers.get("Accept-Language"):
+            for code in codes.split(","):
+                code = code.split(";")[0]
+                for l in locale.get_supported_locales():
+                    if code.lower() == l.split("_")[0]:
+                        return locale.get(l)
         return None
 
 
@@ -310,7 +308,7 @@ class BaseWebSocketHandler(WebSocketHandler):
             request_origin = urlparse(origin)
             origin = urlparse(self.config.origin)
             logging.debug(
-                "Checking request origin '%s' ends with '%s'" % (request_origin, origin)
+                f"Checking request origin '{request_origin}' ends with '{origin}'"
             )
             return request_origin.netloc.endswith(origin)
         except:
@@ -343,11 +341,10 @@ class BaseWebSocketHandler(WebSocketHandler):
             "ip_address": self.request.remote_ip,
         }
         old_session = MemcachedSession.load(**kwargs)
-        if old_session and not old_session.is_expired():
-            old_session.refresh()
-            return old_session
-        else:
+        if not old_session or old_session.is_expired():
             return None
+        old_session.refresh()
+        return old_session
 
     def get_current_user(self):
         """Get current user object from database"""

@@ -78,7 +78,7 @@ class SourceCode(DatabaseObject):
 
     @property
     def data(self):
-        with open(options.source_code_market_dir + "/" + self.uuid, "rb") as fp:
+        with open(f"{options.source_code_market_dir}/{self.uuid}", "rb") as fp:
             return decode(fp.read(), "base64")
 
     @data.setter
@@ -87,12 +87,12 @@ class SourceCode(DatabaseObject):
             self.uuid = str(uuid4())
         self.byte_size = len(value)
         self.checksum = sha1(value).hexdigest()
-        with open(options.source_code_market_dir + "/" + self.uuid, "wb") as fp:
+        with open(f"{options.source_code_market_dir}/{self.uuid}", "wb") as fp:
             fp.write(str(encode(value, "base64")).encode())
 
     def delete_data(self):
         """Remove the file from the file system, if it exists"""
-        fpath = options.source_code_market_dir + "/" + self.uuid
+        fpath = f"{options.source_code_market_dir}/{self.uuid}"
         if os.path.exists(fpath) and os.path.isfile(fpath):
             os.unlink(fpath)
 

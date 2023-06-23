@@ -38,7 +38,7 @@ class _DatabaseObject(object):
         """Converts name from camel case to snake case"""
         name = self.__name__
         return name[0].lower() + re.sub(
-            r"([A-Z])", lambda letter: "_" + letter.group(0).lower(), name[1:]
+            r"([A-Z])", lambda letter: f"_{letter.group(0).lower()}", name[1:]
         )
 
     id = Column(Integer, primary_key=True)  # lint:ok

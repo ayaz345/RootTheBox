@@ -34,10 +34,7 @@ class MaterialsHandler(BaseHandler):
     @authenticated
     def get(self, *args, **kwargs):
         if self.show_materials():
-            subdir = ""
-            if len(args) == 1:
-                subdir = "/" + args[0] + "/"
-
+            subdir = f"/{args[0]}/" if len(args) == 1 else ""
             self.render("file_upload/material_files.html", errors=None, subdir=subdir)
         else:
             self.redirect("/gamestatus")
@@ -50,8 +47,7 @@ class MaterialsHandler(BaseHandler):
                 tmp = os.path.join(os.path.abspath(d), args[0])
                 if is_directory_traversal(tmp):
                     logging.warning(
-                        "%s attempted to use a directory traversal"
-                        % self.request.remote_ip
+                        f"{self.request.remote_ip} attempted to use a directory traversal"
                     )
                     self.redirect(self.application.settings["forbidden_url"])
                     return
@@ -75,17 +71,17 @@ class MaterialsHandler(BaseHandler):
             d["type"] = "file"
             if options.force_download_game_materials:
                 d["a_attr"] = {
-                    "href": "%s" % downloadpath,
-                    "onclick": "window.location.href = '%s';" % downloadpath,
+                    "href": f"{downloadpath}",
+                    "onclick": f"window.location.href = '{downloadpath}';",
                 }
             else:
                 d["a_attr"] = {
-                    "href": "%s" % downloadpath,
-                    "onclick": "window.open('%s');" % downloadpath,
+                    "href": f"{downloadpath}",
+                    "onclick": f"window.open('{downloadpath}');",
                     "target": "_blank",
                 }
             e = os.path.splitext(path)[1][1:]  # get .ext and remove dot
-            d["icon"] = "file ext_%s" % e
+            d["icon"] = f"file ext_{e}"
         return d
 
     def show_materials(self):
@@ -120,9 +116,6 @@ def has_box_materials(box):
     path = os.path.join(d, box.name)
     if os.path.isdir(path):
         return box.name
-    else:
-        corp = Corporation.by_id(box.corporation_id)
-        path = os.path.join(d, corp.name, box.name)
-    if os.path.isdir(path):
-        return os.path.join(corp.name, box.name)
-    return False
+    corp = Corporation.by_id(box.corporation_id)
+    path = os.path.join(d, corp.name, box.name)
+    return os.path.join(corp.name, box.name) if os.path.isdir(path) else False

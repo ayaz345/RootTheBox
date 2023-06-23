@@ -160,12 +160,12 @@ class Swat(DatabaseObject):
         """
         Return bool based on if there are any pending bribes in database
         """
-        return 0 < len(cls.pending_by_target_id(user.id))
+        return len(cls.pending_by_target_id(user.id)) > 0
 
     @classmethod
     def user_is_in_progress(cls, user):
         """Returns bool based on if a user had a bribe in progress"""
-        return 0 < len(cls.in_progress_by_target_id(user.id))
+        return len(cls.in_progress_by_target_id(user.id)) > 0
 
     @property
     def user(self):
@@ -176,16 +176,16 @@ class Swat(DatabaseObject):
         return User.by_id(self.target_id)
 
     def is_pending(self):
-        return True if not self.accepted and not self.completed else False
+        return not self.accepted and not self.completed
 
     def is_in_progress(self):
-        return True if self.accepted and not self.completed else False
+        return bool(self.accepted and not self.completed)
 
     def is_declined(self):
-        return True if not self.accepted and self.completed else False
+        return bool(not self.accepted and self.completed)
 
     def is_successful(self):
-        return True if self.accepted and self.completed else False
+        return bool(self.accepted and self.completed)
 
     def __repr__(self):
         return "<SWAT user_id: %d, target_id: %d" % (self.user_id, self.target_id)

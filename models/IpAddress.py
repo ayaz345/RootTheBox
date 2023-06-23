@@ -63,7 +63,7 @@ class IpAddress(DatabaseObject):
         return dbsession.query(cls).filter_by(_address=address).first()
 
     @classmethod
-    def ipformat(self, value):
+    def ipformat(cls, value):
         ipformat = value
         if ipformat:
             if ipformat.count(":") == 1:
@@ -113,7 +113,7 @@ class IpAddress(DatabaseObject):
         ET.SubElement(ip_elem, "address").text = self.address
 
     def __repr__(self):
-        return "<IpAddress - %s>" % self.address
+        return f"<IpAddress - {self.address}>"
 
     def __str__(self):
         return self._address

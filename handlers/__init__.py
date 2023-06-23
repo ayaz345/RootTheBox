@@ -321,7 +321,7 @@ def start_server():
     server.add_sockets(sockets)
     if options.debug:
         logging.warning(
-            "%sDebug mode is enabled; DO NOT USE THIS IN PRODUCTION%s" % (bold + R, W)
+            f"{bold + R}Debug mode is enabled; DO NOT USE THIS IN PRODUCTION{W}"
         )
     try:
         logging.info("Building Scoreboard Gamestate...")
@@ -331,7 +331,7 @@ def start_server():
             logging.info("Table definitions have changed -restarting RootTheBox.")
             return "restart"
         else:
-            logging.error("There was a problem starting RootTheBox. Error: " + str(err))
+            logging.error(f"There was a problem starting RootTheBox. Error: {str(err)}")
     if options.autostart_game:
         logging.info("The game is about to begin, good hunting!")
     try:

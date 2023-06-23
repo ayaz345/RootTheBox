@@ -72,7 +72,7 @@ class BaseSession(MutableMapping):
         self.ip_address = ip_address
 
     def __repr__(self):
-        return "<Session id: %s, Expires: %s>" % (self.session_id, self.expires)
+        return f"<Session id: {self.session_id}, Expires: {self.expires}>"
 
     def __str__(self):
         return str(self.session_id)
@@ -198,8 +198,7 @@ class MemcachedSession(BaseSession):
         """Load the session from storage."""
         session = None
         try:
-            value = connection.get(str(session_id))
-            if value:
+            if value := connection.get(str(session_id)):
                 kwargs = MemcachedSession.deserialize(value)
                 session = MemcachedSession(connection, **kwargs)
         except:

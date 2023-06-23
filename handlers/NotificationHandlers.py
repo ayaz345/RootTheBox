@@ -36,9 +36,7 @@ class NotifySocketHandler(BaseWebSocketHandler):
         """When we receive a new websocket connect"""
         self.event_manager.add_connection(self)
         if self.session is not None and "team_id" in self.session:
-            logging.debug(
-                "Opened new websocket with user id: %s" % (self.session["user_id"],)
-            )
+            logging.debug(f'Opened new websocket with user id: {self.session["user_id"]}')
             self.io_loop.add_callback(
                 self.event_manager.push_user, self.team_id, self.user_id
             )

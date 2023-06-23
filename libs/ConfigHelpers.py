@@ -12,7 +12,7 @@ from libs.ValidationError import ValidationError
 
 
 def save_config():
-    logging.info("Saving current config to: %s" % options.config)
+    logging.info(f"Saving current config to: {options.config}")
     with open(options.config, "w") as fp:
         fp.write("##########################")
         fp.write(" Root the Box Config File ")
@@ -45,19 +45,18 @@ def save_config():
 
 def save_config_image(b64_data):
     image_data = bytearray(b64decode(b64_data))
-    if len(image_data) < (2048 * 2048):
-        ext = imghdr.what("", h=image_data)
-        file_name = "/story/%s.%s" % (hashlib.sha1(image_data).hexdigest(), ext)
-        if ext in ["png", "jpeg", "gif", "bmp"] and not is_xss_image(image_data):
-            with open("files" + file_name, "wb") as fp:
-                fp.write(image_data)
-            return file_name
-        else:
-            raise ValidationError(
-                "Invalid image format, avatar must be: .png .jpeg .gif or .bmp"
-            )
-    else:
+    if len(image_data) >= 2048 * 2048:
         raise ValidationError("The image is too large")
+    ext = imghdr.what("", h=image_data)
+    file_name = f"/story/{hashlib.sha1(image_data).hexdigest()}.{ext}"
+    if ext in ["png", "jpeg", "gif", "bmp"] and not is_xss_image(image_data):
+        with open(f"files{file_name}", "wb") as fp:
+            fp.write(image_data)
+        return file_name
+    else:
+        raise ValidationError(
+            "Invalid image format, avatar must be: .png .jpeg .gif or .bmp"
+        )
 
 
 def create_demo_user():

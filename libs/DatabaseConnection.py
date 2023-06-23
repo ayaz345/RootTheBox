@@ -80,20 +80,14 @@ class DatabaseConnection(object):
         try:
             import pypostgresql
         except ImportError:
-            print(WARN + "You must install 'pypostgresql'")
+            print(f"{WARN}You must install 'pypostgresql'")
             os._exit(1)
         db_host, db_name, db_user, db_password = self._db_credentials()
-        postgres = "postgresql+pypostgresql://%s:%s@%s/%s" % (
-            db_user,
-            db_password,
-            db_host,
-            db_name,
-        )
+        postgres = f"postgresql+pypostgresql://{db_user}:{db_password}@{db_host}/{db_name}"
         if self._test_connection(postgres):
             return postgres
-        else:
-            logging.fatal("Cannot connect to database with any available driver")
-            os._exit(1)
+        logging.fatal("Cannot connect to database with any available driver")
+        os._exit(1)
 
     def _sqlite(self):
         """
@@ -104,19 +98,19 @@ class DatabaseConnection(object):
         if not len(db_name):
             db_name = "rootthebox.db"
         if not db_name.endswith(".db"):
-            db_name = "%s.db" % db_name
-        if os.path.exists("files/%s" % db_name):
-            path = "sqlite:///files/%s" % db_name
-            logging.debug("Found rootthebox database at: %s" % path)
+            db_name = f"{db_name}.db"
+        if os.path.exists(f"files/{db_name}"):
+            path = f"sqlite:///files/{db_name}"
+            logging.debug(f"Found rootthebox database at: {path}")
         elif os.path.exists(db_name):
-            path = "sqlite:///%s" % db_name
-            logging.debug("Found rootthebox database at: %s" % path)
+            path = f"sqlite:///{db_name}"
+            logging.debug(f"Found rootthebox database at: {path}")
         else:
             if "files" in db_name:
-                path = "sqlite:///%s" % db_name
+                path = f"sqlite:///{db_name}"
             else:
-                path = "sqlite:///files/%s" % db_name
-            logging.debug("Created rootthebox database at: %s" % path)
+                path = f"sqlite:///files/{db_name}"
+            logging.debug(f"Created rootthebox database at: {path}")
         return path
 
     def _mysql(self):
@@ -124,24 +118,20 @@ class DatabaseConnection(object):
         logging.debug("Configured to use MySQL for a database")
         db_server, db_name, db_user, db_password = self._db_credentials()
         db_charset = "utf8mb4"
-        db_connection = "%s:%s@%s/%s?charset=%s" % (
-            db_user,
-            db_password,
-            db_server,
-            db_name,
-            db_charset,
+        db_connection = (
+            f"{db_user}:{db_password}@{db_server}/{db_name}?charset={db_charset}"
         )
 
         if self.ssl_ca != "":
-            db_connection = db_connection + "&ssl_ca=" + self.ssl_ca
+            db_connection = f"{db_connection}&ssl_ca={self.ssl_ca}"
 
         codecs.register(
             lambda name: codecs.lookup("utf8") if name == "utf8mb4" else None
         )
-        __mysql = "mysql://%s" % db_connection
-        __mysqlclient = "mysql+mysqldb://%s" % db_connection
-        __pymysql = "mysql+pymysql://%s" % db_connection
-        __mysqlconnector = "mysql+mysqlconnector://%s" % db_connection
+        __mysql = f"mysql://{db_connection}"
+        __mysqlclient = f"mysql+mysqldb://{db_connection}"
+        __pymysql = f"mysql+pymysql://{db_connection}"
+        __mysqlconnector = f"mysql+mysqlconnector://{db_connection}"
         if self._test_connection(__mysql):
             return __mysql
         elif self._test_connection(__mysqlclient):
@@ -167,13 +157,13 @@ class DatabaseConnection(object):
             return True
         except Exception as e:
             if options.debug:
-                logging.exception("Database connection failed: %s" % e)
+                logging.exception(f"Database connection failed: {e}")
             return False
 
     def _db_credentials(self):
         """Pull db creds and return them url encoded"""
-        if self.password == "" or self.password == "RUNTIME":
-            sys.stdout.write(PROMPT + "Database password: ")
+        if self.password in ["", "RUNTIME"]:
+            sys.stdout.write(f"{PROMPT}Database password: ")
             sys.stdout.flush()
             self.password = getpass.getpass()
         elif self.password == "ENV":
@@ -184,7 +174,6 @@ class DatabaseConnection(object):
         db_password = quote_plus(self.password)
         if "@" in db_password:
             logging.warning(
-                "%sWARNING:%s Using the '@' symbol in your database password can cause login issues with SQL Alchemy.%s"
-                % (WARN + bold + R, W, WARN)
+                f"{WARN + bold + R}WARNING:{W} Using the '@' symbol in your database password can cause login issues with SQL Alchemy.{WARN}"
             )
         return db_host, db_name, db_user, db_password

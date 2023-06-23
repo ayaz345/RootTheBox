@@ -26,12 +26,7 @@ flag_count = {}
 
 
 def _table_has_column(table, column):
-    has_column = False
-    for col in inspector.get_columns(table):
-        if column not in col["name"]:
-            continue
-        has_column = True
-    return has_column
+    return any(column in col["name"] for col in inspector.get_columns(table))
 
 
 def _has_table(table_name):
@@ -94,7 +89,7 @@ def upgrade():
             conn.execute("COMMIT;")
 
     except Exception as e:
-        print("Failed to import prior snapshot data into game history: %s" % str(e))
+        print(f"Failed to import prior snapshot data into game history: {str(e)}")
         print("Continuing...")
     try:
         res = conn.execute("SELECT * FROM team_to_flag;")
@@ -106,7 +101,7 @@ def upgrade():
         if i > 0:
             conn.execute("COMMIT;")
     except Exception as e:
-        print("Failed to import prior flag count into game history: %s" % str(e))
+        print(f"Failed to import prior flag count into game history: {str(e)}")
         print("Continuing...")
 
     if _has_table("snapshot_to_snapshot_team"):
@@ -123,4 +118,3 @@ def upgrade():
 
 def downgrade():
     print("No downgrade for this")
-    pass

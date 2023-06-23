@@ -52,9 +52,7 @@ class Category(DatabaseObject):
     def list(cls):
         """Returns a list of all categories in the database"""
         categories = dbsession.query(cls).all()
-        catlist = []
-        for cat in categories:
-            catlist.append(cat.category)
+        catlist = [cat.category for cat in categories]
         return json.dumps(catlist)
 
     @classmethod
@@ -78,13 +76,11 @@ class Category(DatabaseObject):
 
     @property
     def description(self):
-        if self._description is None:
-            return ""
-        return self._description
+        return "" if self._description is None else self._description
 
     @description.setter
     def description(self, value):
-        if 1024 < len(value):
+        if len(value) > 1024:
             raise ValidationError("Description cannot be greater than 1024 characters")
         self._description = str(value)
 
@@ -94,7 +90,7 @@ class Category(DatabaseObject):
 
     @category.setter
     def category(self, value):
-        if not len(value) <= 64:
+        if len(value) > 64:
             raise ValidationError("Category name must be 0 - 64 characters")
         self._category = str(value)
 

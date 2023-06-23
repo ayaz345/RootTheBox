@@ -71,7 +71,7 @@ class PasswordSecurityHandler(BaseHandler):
         old_passwd = self.get_argument("old_password", "")
         if not user.validate_bank_password(old_passwd):
             self.render_page(["Invalid password"])
-        elif not passwd == self.get_argument("new_password2", None):
+        elif passwd != self.get_argument("new_password2", None):
             self.render_page(["New passwords do not match"])
         elif user.team.money < self.config.password_upgrade_cost:
             self.render_page(["You cannot afford to upgrade your hash"])
@@ -137,7 +137,7 @@ class FederalReserveAjaxHandler(BaseHandler):
             "info": self.info,  # Report
             "xfer": self.transfer,  # Transfer
         }
-        if 0 < len(args) and args[0] in commands:
+        if args and args[0] in commands:
             commands[args[0]]()
         else:
             self.write({"error": "No argument"})
@@ -154,26 +154,26 @@ class FederalReserveAjaxHandler(BaseHandler):
     def ls(self):
         current_user = self.get_current_user()
         if self.get_argument("data", "").lower() == "accounts":
-            data = {}
-            for team in Team.all():
-                if team == current_user.team:
-                    continue
-                else:
-                    data[team.name] = {
-                        "money": team.money,
-                        "flags": len(team.flags),
-                        "bots": team.bot_count,
-                    }
+            data = {
+                team.name: {
+                    "money": team.money,
+                    "flags": len(team.flags),
+                    "bots": team.bot_count,
+                }
+                for team in Team.all()
+                if team != current_user.team
+            }
             self.write({"accounts": data})
         elif self.get_argument("data", "").lower() == "users":
-            data = {}
             target_users = User.not_team(current_user.team.id)
-            for user in target_users:
-                data[user.handle] = {
+            data = {
+                user.handle: {
                     "account": user.team.name,
                     "algorithm": user.algorithm,
                     "password": user.bank_password,
                 }
+                for user in target_users
+            }
             self.write({"users": data})
         else:
             self.write({"Error": "Invalid data type"})
@@ -289,8 +289,7 @@ class SourceCodeMarketHandler(BaseHandler):
         team.set_score("purchase_code", team.money - abs(source_code.price))
         team.purchased_source_code.append(source_code)
         logging.info(
-            "%s purchased '%s' from the source code market."
-            % (team.name, source_code.file_name)
+            f"{team.name} purchased '{source_code.file_name}' from the source code market."
         )
         self.dbsession.add(team)
         self.dbsession.commit()
@@ -334,9 +333,7 @@ class SourceCodeMarketDownloadHandler(BaseHandler):
                         if char in self.goodchars
                     ]
                 )
-                self.set_header(
-                    "Content-Disposition", "attachment; filename=%s" % fname
-                )
+                self.set_header("Content-Disposition", f"attachment; filename={fname}")
                 self.write(box.source_code.data)
                 self.finish()
             else:
@@ -365,23 +362,22 @@ class SwatHandler(BaseHandler):
     def post(self, *args, **kwargs):
         """Validate user arguments for SWAT request"""
         target = User.by_uuid(self.get_argument("uuid", ""))
-        if target is not None and not target.is_admin():
-            if not Swat.user_is_pending(target) and not Swat.user_is_in_progress(
+        if target is None or target.is_admin():
+            self.render_page("Target user does not exist")
+
+        elif not Swat.user_is_pending(target) and not Swat.user_is_in_progress(
                 target
             ):
-                user = self.get_current_user()
-                if target not in user.team.members:
-                    if Swat.get_price(target) <= user.team.money:
-                        self.create_swat(user, target)
-                        self.redirect("/swat")
-                    else:
-                        self.render_page("You cannot afford this bribe")
-                else:
-                    self.render_page("You cannot SWAT your own team")
+            user = self.get_current_user()
+            if target in user.team.members:
+                self.render_page("You cannot SWAT your own team")
+            elif Swat.get_price(target) <= user.team.money:
+                self.create_swat(user, target)
+                self.redirect("/swat")
             else:
-                self.render_page("A bribe is already exists for this player")
+                self.render_page("You cannot afford this bribe")
         else:
-            self.render_page("Target user does not exist")
+            self.render_page("A bribe is already exists for this player")
 
     def create_swat(self, user, target):
         """Create Swat request object in database"""

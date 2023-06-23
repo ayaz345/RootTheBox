@@ -21,12 +21,7 @@ depends_on = None
 
 
 def _table_has_column(table, column):
-    has_column = False
-    for col in inspector.get_columns(table):
-        if column not in col["name"]:
-            continue
-        has_column = True
-    return has_column
+    return any(column in col["name"] for col in inspector.get_columns(table))
 
 
 def _has_table(table_name):

@@ -65,7 +65,7 @@ db_connection = DatabaseConnection(
 if options.auth == "azuread":
     azuread_app = ConfidentialClientApplication(
         options.client_id,
-        authority="https://login.microsoftonline.com/" + options.tenant_id,
+        authority=f"https://login.microsoftonline.com/{options.tenant_id}",
         client_credential=options.client_secret,
     )
 else:

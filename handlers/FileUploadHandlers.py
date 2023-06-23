@@ -59,9 +59,7 @@ class FileUploadHandler(BaseHandler):
             """Shit form validation"""
             user = self.get_current_user()
             self.errors = []
-            shares = []
-            if user.team:
-                shares = user.team.files
+            shares = user.team.files if user.team else []
             if hasattr(self.request, "files"):
                 teams = []
                 if user.is_admin():
@@ -78,17 +76,16 @@ class FileUploadHandler(BaseHandler):
                         file_upload = self.create_file(team, shared_file)
                         if file_upload is not None:
                             self.event_manager.team_file_shared(user, team, file_upload)
-                if not len(self.errors):
-                    if user.is_admin():
-                        self.redirect("/admin/view/fileshare")
-                    else:
-                        self.redirect("/user/share/files")
-                else:
+                if len(self.errors):
                     self.render(
                         "file_upload/shared_files.html",
                         errors=self.errors,
                         shares=shares,
                     )
+                elif user.is_admin():
+                    self.redirect("/admin/view/fileshare")
+                else:
+                    self.redirect("/user/share/files")
             else:
                 self.render(
                     "file_upload/shared_files.html",
@@ -132,7 +129,7 @@ class FileDownloadHandler(BaseHandler):
                 self.set_header("Content-Length", shared_file.byte_size)
                 self.set_header(
                     "Content-Disposition",
-                    "attachment; filename=%s" % (shared_file.file_name),
+                    f"attachment; filename={shared_file.file_name}",
                 )
                 self.write(shared_file.data)
             else:
@@ -151,17 +148,13 @@ class FileDeleteHandler(BaseHandler):
             user = self.get_current_user()
             shared_file = FileUpload.by_uuid(self.get_argument("uuid", ""))
             if user.is_admin():
-                logging.info(
-                    "%s deleted a shared file %s" % (user.handle, shared_file.uuid)
-                )
+                logging.info(f"{user.handle} deleted a shared file {shared_file.uuid}")
                 shared_file.delete_data()
                 self.dbsession.delete(shared_file)
                 self.dbsession.commit()
                 self.redirect("/admin/view/fileshare")
             elif shared_file is not None and shared_file in user.team.files:
-                logging.info(
-                    "%s deleted a shared file %s" % (user.handle, shared_file.uuid)
-                )
+                logging.info(f"{user.handle} deleted a shared file {shared_file.uuid}")
                 shared_file.delete_data()
                 self.dbsession.delete(shared_file)
                 self.dbsession.commit()

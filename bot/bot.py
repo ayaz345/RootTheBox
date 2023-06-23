@@ -201,10 +201,7 @@ def _parse_url(url):
         hostname = parsed.hostname
     else:
         raise ValueError("hostname is invalid")
-    port = 0
-    if parsed.port:
-        port = parsed.port
-
+    port = parsed.port if parsed.port else 0
     is_secure = False
     if scheme == "ws":
         if not port:
@@ -214,15 +211,11 @@ def _parse_url(url):
         if not port:
             port = 443
     else:
-        raise ValueError("scheme %s is invalid" % scheme)
+        raise ValueError(f"scheme {scheme} is invalid")
 
-    if parsed.path:
-        resource = parsed.path
-    else:
-        resource = "/"
-
+    resource = parsed.path if parsed.path else "/"
     if parsed.query:
-        resource += "?" + parsed.query
+        resource += f"?{parsed.query}"
 
     return (hostname, port, resource, is_secure)
 
@@ -302,11 +295,7 @@ _BOOL_VALUES = (0, 1)
 
 
 def _is_bool(*values):
-    for v in values:
-        if v not in _BOOL_VALUES:
-            return False
-
-    return True
+    return all(v in _BOOL_VALUES for v in values)
 
 
 class ABNF(object):
@@ -401,9 +390,8 @@ class ABNF(object):
             frame_header += struct.pack("!Q", length)
         if not self.mask:
             return frame_header + encode(self.data)
-        else:
-            mask_key = self.get_mask_key(4)
-            return frame_header + self._get_masked(mask_key)
+        mask_key = self.get_mask_key(4)
+        return frame_header + self._get_masked(mask_key)
 
     def _get_masked(self, mask_key):
         mask = ABNF.mask_data(mask_key, self.data)
@@ -514,30 +502,27 @@ class WebSocket(object):
 
     def _handshake(self, host, port, resource, **options):
         sock = self.io_sock
-        headers = []
-        headers.append("GET %s HTTP/1.1" % resource)
-        headers.append("Upgrade: websocket")
-        headers.append("Connection: Upgrade")
-        if port == 80:
-            hostport = host
-        else:
-            hostport = "%s:%d" % (host, port)
-        headers.append("Host: %s" % hostport)
+        headers = [
+            f"GET {resource} HTTP/1.1",
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+        ]
+        hostport = host if port == 80 else "%s:%d" % (host, port)
+        headers.append(f"Host: {hostport}")
 
         if "origin" in options:
-            headers.append("Origin: %s" % options["origin"])
+            headers.append(f'Origin: {options["origin"]}')
         else:
-            headers.append("Origin: http://%s" % hostport)
+            headers.append(f"Origin: http://{hostport}")
 
         key = _create_sec_websocket_key()
-        headers.append("Sec-WebSocket-Key: %s" % key)
-        headers.append("Sec-WebSocket-Version: %s" % VERSION)
+        headers.extend(
+            (f"Sec-WebSocket-Key: {key}", f"Sec-WebSocket-Version: {VERSION}")
+        )
         if "header" in options:
             headers.extend(options["header"])
 
-        headers.append("")
-        headers.append("")
-
+        headers.extend(("", ""))
         header_str = encode("\r\n".join(headers), "utf-8")
         sock.send(header_str)
         if traceEnabled:
@@ -571,7 +556,7 @@ class WebSocket(object):
             return False
         result = result.lower()
 
-        value = key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+        value = f"{key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
         hashed = decode(
             base64.encodestring(hashlib.sha1(encode(value)).digest()).strip().lower()
         )
@@ -595,12 +580,11 @@ class WebSocket(object):
                 status = int(status_info[1])
             else:
                 kv = line.split(":", 1)
-                if len(kv) == 2:
-                    key, value = kv
-                    headers[key.lower()] = value.strip().lower()
-                else:
+                if len(kv) != 2:
                     raise WebSocketException("Invalid header")
 
+                key, value = kv
+                headers[key.lower()] = value.strip().lower()
         if traceEnabled:
             logger.debug("-----------------------")
 
@@ -617,7 +601,7 @@ class WebSocket(object):
         opcode: operation code to send. Please see OPCODE_XXX.
         """
         if traceEnabled:
-            logger.debug("send: " + repr(payload))
+            logger.debug(f"send: {repr(payload)}")
         frame = ABNF.create_frame(payload, opcode)
         if self.get_mask_key:
             frame.get_mask_key = self.get_mask_key
@@ -662,7 +646,7 @@ class WebSocket(object):
             if not frame:
                 # handle error:
                 # 'NoneType' object has no attribute 'opcode'
-                raise WebSocketException("Not a valid frame %s" % frame)
+                raise WebSocketException(f"Not a valid frame {frame}")
             elif frame.opcode in (ABNF.OPCODE_TEXT, ABNF.OPCODE_BINARY):
                 return (frame.opcode, frame.data)
             elif frame.opcode == ABNF.OPCODE_CLOSE:
@@ -704,20 +688,17 @@ class WebSocket(object):
             length_data = self._recv_strict(8)
             length = struct.unpack("!Q", length_data)[0]
 
-        mask_key = ""
-        if mask:
-            mask_key = self._recv_strict(4)
+        mask_key = self._recv_strict(4) if mask else ""
         data = self._recv_strict(length)
 
         if traceEnabled:
             received = header_bytes + encode(length_data) + encode(mask_key) + data
-            logger.debug("recv: " + repr(received))
+            logger.debug(f"recv: {repr(received)}")
 
         if mask:
             data = ABNF.mask_data(mask_key, data)
 
-        frame = ABNF(fin, rsv1, rsv2, rsv3, opcode, mask, data)
-        return frame
+        return ABNF(fin, rsv1, rsv2, rsv3, opcode, mask, data)
 
     def send_close(self, status=STATUS_NORMAL, reason=""):
         """
@@ -729,7 +710,7 @@ class WebSocket(object):
         """
         if status < 0 or status >= ABNF.LENGTH_16:
             raise ValueError("code is invalid range")
-        self.send("%s%s" % (struct.pack("!H", status), reason), ABNF.OPCODE_CLOSE)
+        self.send(f'{struct.pack("!H", status)}{reason}', ABNF.OPCODE_CLOSE)
 
     def close(self, status=STATUS_NORMAL, reason=""):
         """
@@ -752,7 +733,7 @@ class WebSocket(object):
                     if logger.isEnabledFor(logging.ERROR):
                         recv_status = struct.unpack("!H", frame.data)[0]
                         if recv_status != STATUS_NORMAL:
-                            logger.error("close status: " + repr(recv_status))
+                            logger.error(f"close status: {repr(recv_status)}")
                 except:
                     pass
                 self.sock.settimeout(timeout)
@@ -767,10 +748,10 @@ class WebSocket(object):
         self.io_sock = self.sock
 
     def _recv(self, bufsize):
-        bytes_val = self.io_sock.recv(bufsize)
-        if not bytes_val:
+        if bytes_val := self.io_sock.recv(bufsize):
+            return bytes_val
+        else:
             raise WebSocketConnectionClosedException()
-        return bytes_val
 
     def _recv_strict(self, bufsize):
         remaining = bufsize
@@ -903,8 +884,8 @@ def display_error(ws, response, verbose=False):
 
 
 def display_status(ws, response, verbose=False):
-    sys.stdout.write(chr(27) + "[2K" + "\r")
-    sys.stdout.write("%s %s Status : %s " % (INFO, current_time(), response["message"]))
+    sys.stdout.write(f"{chr(27)}[2K" + "\r")
+    sys.stdout.write(f'{INFO} {current_time()} Status : {response["message"]} ')
     if (ws is not None and ws.verbose) or verbose:
         sys.stdout.write("\n")
     sys.stdout.flush()
@@ -912,9 +893,9 @@ def display_status(ws, response, verbose=False):
 
 def get_response_xid(garbage, xid):
     round1 = encode(sha512(encode(xid + garbage)).hexdigest())
-    print("Garbage: " + garbage)
-    print("XID :" + xid)
-    print("[*] Return: " + str(sha512(round1).hexdigest()))
+    print(f"Garbage: {garbage}")
+    print(f"XID :{xid}")
+    print(f"[*] Return: {str(sha512(round1).hexdigest())}")
     return sha512(round1).hexdigest()
 
 
@@ -931,9 +912,9 @@ def send_interrogation_response(ws, response):
 
 def recv_ping(ws, response, verbose=False):
     """Print that we just got a ping from c&c"""
-    sys.stdout.write(chr(27) + "[2K" + "\r")
+    sys.stdout.write(f"{chr(27)}[2K" + "\r")
     sys.stdout.write(
-        INFO + " %s  Ping  : Received a ping from command & control" % current_time()
+        f"{INFO} {current_time()}  Ping  : Received a ping from command & control"
     )
     if (ws is not None and ws.verbose) or verbose:
         sys.stdout.write("\n")
@@ -988,19 +969,21 @@ def main(domain, port, user, garbage_path, secure, verbose):
     if garbage_path is None:
         garbage_path = get_default_garbage()
     if not os.path.exists(garbage_path):
-        print(WARN + " Garbage file not found %s" % garbage_path)
+        print(f"{WARN} Garbage file not found {garbage_path}")
         os._exit(1)
     fp = open(garbage_path, "r")
     try:
         garbage_cfg.readfp(fp)
     except:
-        print(WARN + " Garbage file is not properly formatted")
+        print(f"{WARN} Garbage file is not properly formatted")
         os._exit(2)
     try:
         enableTrace(verbose)
-        connection_url = "ws://%s:%s/%s" % (domain, port, __path__)
+        connection_url = f"ws://{domain}:{port}/{__path__}"
         display_status(
-            None, {"message": "Connecting to: %s" % connection_url}, verbose=verbose
+            None,
+            {"message": f"Connecting to: {connection_url}"},
+            verbose=verbose,
         )
         ws = WebSocketApp(
             connection_url, on_message=on_message, on_error=on_error, on_close=on_close
@@ -1022,7 +1005,7 @@ def main(domain, port, user, garbage_path, secure, verbose):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__desc__)
     parser.add_argument(
-        "--version", action="version", version="%(prog)s v" + __version__
+        "--version", action="version", version=f"%(prog)s v{__version__}"
     )
     parser.add_argument(
         "--verbose",
@@ -1047,14 +1030,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--domain",
         "-d",
-        help="scoring engine ip address, or domain (default: %s)" % __domain__,
+        help=f"scoring engine ip address, or domain (default: {__domain__})",
         default=__domain__,
         dest="domain",
     )
     parser.add_argument(
         "--port",
         "-p",
-        help="netork port to connect to (default: %s)" % __port__,
+        help=f"netork port to connect to (default: {__port__})",
         default=__port__,
         dest="port",
     )

@@ -121,13 +121,12 @@ class Notification(DatabaseObject):
         """Create a notification and save it to the database"""
         logging.debug("Creating notification '%s' for %r" % (title, user))
         icon = icon if icon is not None else INFO
-        notification = Notification(
+        return Notification(
             user_id=user.id,
             title=str(title),
             message=str(message),
             icon_url=urlparse(icon).path,
         )
-        return notification
 
     def to_dict(self):
         """Return public data as dict"""

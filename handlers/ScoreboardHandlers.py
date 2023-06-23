@@ -168,19 +168,18 @@ class ScoreboardAjaxHandler(BaseHandler):
         """Prepare the pagination for the leaderboard"""
         teams = self.settings["scoreboard_state"].get("teams")
         teamcount = len(teams)
-        if teamcount > display:
-            scoreboard = self.settings["scoreboard_state"].copy()
-            scoreboard["teams"] = OrderedDict()
-            end_count = display * page
-            start_count = end_count - display
-            for i, team in enumerate(teams):
-                if i >= start_count and i < end_count:
-                    scoreboard["teams"][team] = teams[team]
-                elif i >= end_count:
-                    break
-            return scoreboard
-        else:
+        if teamcount <= display:
             return self.settings["scoreboard_state"]
+        scoreboard = self.settings["scoreboard_state"].copy()
+        scoreboard["teams"] = OrderedDict()
+        end_count = display * page
+        start_count = end_count - display
+        for i, team in enumerate(teams):
+            if i >= start_count and i < end_count:
+                scoreboard["teams"][team] = teams[team]
+            elif i >= end_count:
+                break
+        return scoreboard
 
     def mvp_table(self):
         """Render the "leaderboard" mvp snippit"""
@@ -188,8 +187,7 @@ class ScoreboardAjaxHandler(BaseHandler):
         self.render("scoreboard/mvp_table.html", users=users)
 
     def timediff(self):
-        timer = self.timer()
-        if timer:
+        if timer := self.timer():
             self.write(timer)
         else:
             self.finish()
@@ -216,8 +214,7 @@ class ScoreboardAjaxHandler(BaseHandler):
         """Returns team details in JSON form"""
         uuid = self.get_argument("uuid", "")
         if uuid == "":
-            user = self.get_current_user()
-            if user:
+            if user := self.get_current_user():
                 team = user.team
         else:
             team = Team.by_uuid(uuid)
@@ -232,9 +229,7 @@ class ScoreboardAjaxHandler(BaseHandler):
                 box = flag.box
                 if box and box.category_id is not None:
                     catlist[int(box.category_id)] += 1
-            skillvalues = []
-            for val in catlist:
-                skillvalues.append(catlist[val])
+            skillvalues = list(catlist.values())
             self.write(str(skillvalues))
         else:
             self.write({"error": "Team does not exist"})
@@ -246,21 +241,21 @@ class ScoreboardAjaxHandler(BaseHandler):
         teams = self.application.settings["scoreboard_state"]["teams"]
         score_teams = [
             team["uuid"]
-            for team in sorted(teams.values(), key=lambda d: d["money"], reverse=True)[
-                0:top
-            ]
+            for team in sorted(
+                teams.values(), key=lambda d: d["money"], reverse=True
+            )[:top]
         ]
         flag_teams = [
             team["uuid"]
             for team in sorted(
                 teams.values(), key=lambda d: len(d["flags"]), reverse=True
-            )[0:top]
+            )[:top]
         ]
         bot_teams = [
             team["uuid"]
             for team in sorted(
                 teams.values(), key=lambda d: d["bot_count"], reverse=True
-            )[0:top]
+            )[:top]
         ]
         history = {
             "history": {
@@ -270,16 +265,13 @@ class ScoreboardAjaxHandler(BaseHandler):
             }
         }
         for uuid in flag_teams:
-            team = Team.by_uuid(uuid)
-            if team:
+            if team := Team.by_uuid(uuid):
                 history["history"]["flag_count"][team.name] = team.get_history("flags")
         for uuid in score_teams:
-            team = Team.by_uuid(uuid)
-            if team:
+            if team := Team.by_uuid(uuid):
                 history["history"]["score_count"][team.name] = team.get_history("score")
         for uuid in bot_teams:
-            team = Team.by_uuid(uuid)
-            if team:
+            if team := Team.by_uuid(uuid):
                 history["history"]["bot_count"][team.name] = team.get_history("bots")
         self.write(json.dumps(history))
         self.finish()
@@ -303,7 +295,7 @@ class ScoreboardHistoryHandler(BaseHandler):
 class ScoreboardFeedHandler(BaseHandler):
     def get(self, *args, **kwargs):
         """Renders the scoreboard feed page"""
-        hostname = "%s://%s" % (self.request.protocol, self.request.host)
+        hostname = f"{self.request.protocol}://{self.request.host}"
         self.render("scoreboard/feed.html", hostname=hostname)
 
 
@@ -396,8 +388,7 @@ class TeamsHandler(BaseHandler):
         teams = []
         for i, team_name in enumerate(ranks):
             if i >= start_count and i < end_count:
-                team = Team.by_uuid(ranks[team_name].get("uuid"))
-                if team:
+                if team := Team.by_uuid(ranks[team_name].get("uuid")):
                     teams.append(team)
             elif i >= end_count:
                 break

@@ -61,6 +61,4 @@ class Menu(UIModule):
         return False
 
     def registration_allowed(self):
-        if options.auth == "azuread":
-            return False
-        return True
+        return options.auth != "azuread"

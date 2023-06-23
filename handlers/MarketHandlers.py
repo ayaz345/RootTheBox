@@ -68,11 +68,8 @@ class MarketViewHandler(BaseHandler):
                     errors=["You have already purchased this item."],
                 )
             elif team.money < item.price:
-                if options.banking:
-                    money = "$%d" % team.money
-                else:
-                    money = "%d points" % team.money
-                message = "You only have %s" % money
+                money = "$%d" % team.money if options.banking else "%d points" % team.money
+                message = f"You only have {money}"
                 self.render("market/view.html", user=user, errors=[message])
             else:
                 logging.info(

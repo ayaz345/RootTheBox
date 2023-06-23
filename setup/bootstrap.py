@@ -19,6 +19,7 @@
 fills the database with some startup data.
 
 """
+
 # pylint: disable=unused-wildcard-import
 
 
@@ -49,11 +50,13 @@ if (
     admin_handle = "admin"
     password = "rootthebox"
 else:
-    admin_handle = str(input(PROMPT + "RootTheBox Admin Username [admin]: ")) or "admin"
-    sys.stdout.write(PROMPT + "New Admin ")
+    admin_handle = (
+        str(input(f"{PROMPT}RootTheBox Admin Username [admin]: ")) or "admin"
+    )
+    sys.stdout.write(f"{PROMPT}New Admin ")
     sys.stdout.flush()
     password1 = getpass.getpass()
-    sys.stdout.write(PROMPT + "Confirm New Admin ")
+    sys.stdout.write(f"{PROMPT}Confirm New Admin ")
     sys.stdout.flush()
     password2 = getpass.getpass()
     if password1 == password2 and len(password1) >= options.min_user_password_length:

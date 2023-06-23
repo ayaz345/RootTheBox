@@ -225,10 +225,7 @@ class BoxHandler(BaseHandler):
 
     def failed_attempt(self, flag, user, submission, box_id):
         if flag is None or Penalty.by_token_count(flag, user.team, submission) == 0:
-            if options.teams:
-                teamval = "team's "
-            else:
-                teamval = ""
+            teamval = "team's " if options.teams else ""
             penalty = self.failed_capture(flag, submission) if flag is not None else 0
             penalty_dialog = "Sorry - Try Again"
             if penalty:
@@ -241,10 +238,7 @@ class BoxHandler(BaseHandler):
                         + "account."
                     )
                 else:
-                    if penalty == 1:
-                        point = " point has"
-                    else:
-                        point = " points have"
+                    point = " point has" if penalty == 1 else " points have"
                     penalty_dialog = (
                         str(penalty)
                         + point
@@ -256,7 +250,6 @@ class BoxHandler(BaseHandler):
                 self.render_page_by_box_id(box_id, errors=[penalty_dialog])
             else:
                 self.render_page_by_flag(flag, errors=[penalty_dialog])
-            return
         else:
             if options.teams:
                 teamdup = " by your team.  Try Again"
@@ -269,21 +262,19 @@ class BoxHandler(BaseHandler):
                     + teamdup
                 ],
             )
-            return
+
+        return
 
     def success_capture(self, user, flag, old_reward=None):
-        if options.teams:
-            teamval = "team's "
-        else:
-            teamval = ""
+        teamval = "team's " if options.teams else ""
         old_reward = flag.dynamic_value(user.team) if old_reward is None else old_reward
-        reward_dialog = flag.name + " answered correctly. "
         if options.banking:
             reward_added_str_template = (
                 "${} has been added to your " + teamval + "account."
             )
         else:
             reward_added_str_template = "{} points added to your " + teamval + "score."
+        reward_dialog = f"{flag.name} answered correctly. "
         reward_dialog += reward_added_str_template.format(str(old_reward))
         success = [reward_dialog]
 
@@ -300,14 +291,12 @@ class BoxHandler(BaseHandler):
                 self.dbsession.commit()
                 dialog = reward_added_str_template.format(str(box.value))
                 reward_dialog += dialog
-                success.append(
-                    "Congratulations! You have completed " + box.name + ". " + dialog
-                )
+                success.append(f"Congratulations! You have completed {box.name}. {dialog}")
 
                 # Fire box complete webhook
                 send_box_complete_webhook(user, box)
             else:
-                success.append("Congratulations! You have completed " + box.name + ".")
+                success.append(f"Congratulations! You have completed {box.name}.")
 
         # Check for Level Completion
         level = GameLevel.by_id(box.game_level_id)
@@ -323,10 +312,7 @@ class BoxHandler(BaseHandler):
                 self.dbsession.commit()
                 reward_dialog += reward_added_str_template.format(str(level._reward))
             success.append(
-                "Congratulations! You have completed "
-                + level.name
-                + ". "
-                + reward_dialog
+                f"Congratulations! You have completed {level.name}. {reward_dialog}"
             )
 
             # Fire level complete webhook
@@ -339,14 +325,12 @@ class BoxHandler(BaseHandler):
                 and lv.buyout <= user.team.money
                 and lv not in user.team.game_levels
             ):
-                logging.info(
-                    "%s (%s) unlocked %s" % (user.handle, user.team.name, lv.name)
-                )
+                logging.info(f"{user.handle} ({user.team.name}) unlocked {lv.name}")
                 user.team.game_levels.append(lv)
                 self.dbsession.add(user.team)
                 self.dbsession.commit()
                 self.event_manager.level_unlocked(user, lv)
-                success.append("Congratulations! You have unlocked " + lv.name)
+                success.append(f"Congratulations! You have unlocked {lv.name}")
 
         # Unlock next level if based on Game Progress
         next_level = GameLevel.by_id(level.next_level_id)
@@ -355,15 +339,12 @@ class BoxHandler(BaseHandler):
                 next_level._type == "progress"
                 and level_progress * 100 >= next_level.buyout
             ):
-                logging.info(
-                    "%s (%s) unlocked %s"
-                    % (user.handle, user.team.name, next_level.name)
-                )
+                logging.info(f"{user.handle} ({user.team.name}) unlocked {next_level.name}")
                 user.team.game_levels.append(next_level)
                 self.dbsession.add(user.team)
                 self.dbsession.commit()
                 self.event_manager.level_unlocked(user, next_level)
-                success.append("Congratulations! You have unlocked " + next_level.name)
+                success.append(f"Congratulations! You have unlocked {next_level.name}")
         self.event_manager.push_score_update()
         return success
 
@@ -387,8 +368,7 @@ class BoxHandler(BaseHandler):
                 flag.dynamic_value(user.team) * options.flag_penalty_cost * 0.01
             )
             logging.info(
-                "%s (%s) capture failed '%s' - lost %s"
-                % (user.handle, user.team.name, flag.name, penalty)
+                f"{user.handle} ({user.team.name}) capture failed '{flag.name}' - lost {penalty}"
             )
             user.team.set_score("penalty", user.team.money - penalty)
             user.money -= penalty
@@ -404,9 +384,7 @@ class BoxHandler(BaseHandler):
         """Compares a user provided token to the token in the db"""
         user = self.get_current_user()
         team = user.team
-        logging.info(
-            "%s (%s) capture the flag '%s'" % (user.handle, team.name, flag.name)
-        )
+        logging.info(f"{user.handle} ({team.name}) capture the flag '{flag.name}'")
         if submission is not None and flag not in team.flags:
             if flag.capture(submission):
                 flag_value = flag.dynamic_value(team)
@@ -564,29 +542,26 @@ class MissionsHandler(BaseHandler):
         """Buyout and unlock a level"""
         user = self.get_current_user()
         level = GameLevel.by_uuid(self.get_argument("uuid", ""))
-        if level is not None:
-            if level.buyout <= user.team.money:
-                logging.info(
-                    "%s (%s) paid buyout for %s"
-                    % (user.handle, user.team.name, level.name)
-                )
-                user.team.game_levels.append(level)
-                user.team.set_score("level_buyout", user.team.money - level.buyout)
-                self.dbsession.add(user.team)
-                self.dbsession.commit()
-                self.event_manager.level_unlocked(user, level)
-                self.redirect("/user/missions")
-            else:
-                self.render(
-                    "missions/view.html",
-                    team=user.team,
-                    errors=["You do not have enough money to unlock this level"],
-                    success=None,
-                )
-        else:
+        if level is None:
             self.render(
                 "missions/view.html",
                 team=user.team,
                 errors=["Level does not exist"],
+                success=None,
+            )
+
+        elif level.buyout <= user.team.money:
+            logging.info(f"{user.handle} ({user.team.name}) paid buyout for {level.name}")
+            user.team.game_levels.append(level)
+            user.team.set_score("level_buyout", user.team.money - level.buyout)
+            self.dbsession.add(user.team)
+            self.dbsession.commit()
+            self.event_manager.level_unlocked(user, level)
+            self.redirect("/user/missions")
+        else:
+            self.render(
+                "missions/view.html",
+                team=user.team,
+                errors=["You do not have enough money to unlock this level"],
                 success=None,
             )
