@@ -19,9 +19,7 @@ def _svg(width, height, body, color):
 
 
 def _rect(x, y, width, height, color, stroke, stroke_weight):
-    return '<rect x="{}" y="{}" width="{}" height="{}" fill="{}" stroke="{}" stroke-width="{}"/>'.format(
-        x, y, width, height, color, stroke, stroke_weight
-    )
+    return f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="{color}" stroke="{stroke}" stroke-width="{stroke_weight}"/>'
 
 
 def identicon(str_, size, background="#f0f0f0", square=False):
@@ -31,7 +29,7 @@ def identicon(str_, size, background="#f0f0f0", square=False):
     digest, body = digest >> 24, ""
     x = y = 0
     if square:
-        for t in range(size**2 // 2):
+        for _ in range(size**2 // 2):
             if digest & 1:
                 body += _rect(x, y, 1, 1, color, background, stroke_weight)
                 body += _rect(size - x - 1, y, 1, 1, color, background, stroke_weight)
@@ -39,7 +37,7 @@ def identicon(str_, size, background="#f0f0f0", square=False):
             x, y = (x + 1, 0) if y == size else (x, y)
         image_data = _svg(size, size, body, background)
     else:
-        for t in range(size**2):
+        for _ in range(size**2):
             if digest & 1:
                 body += _rect(x, y, 1, 1, color, background, stroke_weight)
                 body += _rect(
@@ -48,7 +46,7 @@ def identicon(str_, size, background="#f0f0f0", square=False):
             digest, y = digest >> 1, y + 1
             x, y = (x + 1, 0) if y == size else (x, y)
         image_data = _svg(size * 2, size, body, background)
-    avatar = "upload/%s.svg" % str(digest)
+    avatar = f"upload/{str(digest)}.svg"
     file_path = path.join(options.avatar_dir, avatar)
     with open(file_path, "w") as fp:
         fp.write(image_data)

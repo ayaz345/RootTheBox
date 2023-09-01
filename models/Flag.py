@@ -234,7 +234,7 @@ class Flag(DatabaseObject):
         )
 
     @classmethod
-    def digest(self, data):
+    def digest(cls, data):
         """Token is SHA1 of data"""
         return hashlib.sha1(data).hexdigest()
 
@@ -275,10 +275,8 @@ class Flag(DatabaseObject):
 
     @name.setter
     def name(self, value):
-        if not len(value) <= 64:
-            raise ValidationError(
-                "Flag name must be less than 64 characters: %s" % value
-            )
+        if len(value) > 64:
+            raise ValidationError(f"Flag name must be less than 64 characters: {value}")
         self._name = str(value)
 
     @property
@@ -332,10 +330,7 @@ class Flag(DatabaseObject):
 
     @case_sensitive.setter
     def case_sensitive(self, value):
-        if value is None:
-            self._case_sensitive = 0
-        else:
-            self._case_sensitive = value
+        self._case_sensitive = 0 if value is None else value
 
     @property
     def value(self):
@@ -361,16 +356,13 @@ class Flag(DatabaseObject):
     @get_lock_id.setter
     def set_lock_id(self, value):
         try:
-            if value is None:
-                self.lock_id = value
-            else:
-                self.lock_id = abs(int(value))
+            self.lock_id = value if value is None else abs(int(value))
         except ValueError:
             self.lock_id = None
 
     @property
     def is_text(self):
-        return self._type == FLAG_REGEX or self._type == FLAG_STATIC
+        return self._type in [FLAG_REGEX, FLAG_STATIC]
 
     @property
     def is_static(self):
@@ -387,9 +379,7 @@ class Flag(DatabaseObject):
     @property
     def locked(self):
         """Determines if an admin has locked an flag."""
-        if self._locked == None:
-            return False
-        return self._locked
+        return False if self._locked is None else self._locked
 
     @locked.setter
     def locked(self, value):
@@ -409,8 +399,7 @@ class Flag(DatabaseObject):
         if self._type == FLAG_CHOICE:
             choicelist = FlagChoice.by_flag_id(self.id)
             if choicelist is not None and len(choicelist) > 0:
-                for flagchoice in choicelist:
-                    choices.append(flagchoice.to_dict())
+                choices.extend(flagchoice.to_dict() for flagchoice in choicelist)
         return json.dumps(choices)
 
     def choicelist(self):
@@ -419,8 +408,7 @@ class Flag(DatabaseObject):
         if self._type == FLAG_CHOICE:
             choicelist = FlagChoice.by_flag_id(self.id)
             if choicelist is not None and len(choicelist) > 0:
-                for flagchoice in choicelist:
-                    choices.append(flagchoice.choice)
+                choices.extend(flagchoice.choice for flagchoice in choicelist)
         return json.dumps(choices)
 
     def capture(self, submission):
@@ -433,7 +421,7 @@ class Flag(DatabaseObject):
                 return str(self.token).strip() == str(submission).strip()
         elif self._type == FLAG_REGEX:
             if not self.token.startswith("^(") and not self.token.endswith(")$"):
-                self.token = "^(" + self.token + ")$"
+                self.token = f"^({self.token})$"
             if self._case_sensitive == 0:
                 pattern = re.compile(self.token, re.IGNORECASE)
             else:
@@ -465,18 +453,18 @@ class Flag(DatabaseObject):
             ET.SubElement(flag_elem, "depends_on").text = Flag.by_id(self.lock_id).name
         ET.SubElement(flag_elem, "case_sensitive").text = str(self.case_sensitive)
         attachments_elem = ET.SubElement(flag_elem, "flag_attachments")
-        attachments_elem.set("count", "%s" % str(len(self.flag_attachments)))
+        attachments_elem.set("count", f"{len(self.flag_attachments)}")
         for attachment in self.flag_attachments:
             attachment.to_xml(attachments_elem)
         choice_elem = ET.SubElement(flag_elem, "flag_choices")
-        choice_elem.set("count", "%s" % str(len(self.flag_choice)))
+        choice_elem.set("count", f"{len(self.flag_choice)}")
         for choice in self.flag_choice:
             ET.SubElement(choice_elem, "choice").text = choice.choice
         from models.Hint import Hint
 
         xml_hints = Hint.by_flag_id(self.id)
         hints_elem = ET.SubElement(flag_elem, "hints")
-        hints_elem.set("count", "%s" % str(len(xml_hints)))
+        hints_elem.set("count", f"{len(xml_hints)}")
         for hint in xml_hints:
             if hint.flag_id is not None:
                 hint.to_xml(hints_elem)
@@ -484,10 +472,7 @@ class Flag(DatabaseObject):
     def to_dict(self):
         """Returns public data as a dict"""
         box = Box.by_id(self.box_id)
-        if self.lock_id:
-            lock_uuid = Flag.by_id(self.lock_id).uuid
-        else:
-            lock_uuid = ""
+        lock_uuid = Flag.by_id(self.lock_id).uuid if self.lock_id else ""
         case_sensitive = self.case_sensitive
         if case_sensitive != 0:
             case_sensitive = 1
@@ -508,7 +493,7 @@ class Flag(DatabaseObject):
         }
 
     def __repr__(self):
-        return "<Flag - name:%s, type:%s >" % (self.name, str(self._type))
+        return f"<Flag - name:{self.name}, type:{str(self._type)} >"
 
     def __str__(self):
         return self.name

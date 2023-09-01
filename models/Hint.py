@@ -119,11 +119,7 @@ class Hint(DatabaseObject):
         ET.SubElement(hint_elem, "description").text = self._description
 
     def to_dict(self):
-        flag = Flag.by_id(self.flag_id)
-        if flag:
-            flag_uuid = flag.uuid
-        else:
-            flag_uuid = ""
+        flag_uuid = flag.uuid if (flag := Flag.by_id(self.flag_id)) else ""
         return {
             "price": str(self.price),
             "description": self.description,

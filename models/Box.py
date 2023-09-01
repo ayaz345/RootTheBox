@@ -157,8 +157,8 @@ class Box(DatabaseObject):
         return ip.box if ip is not None else None
 
     @classmethod
-    def flaglist(self, box_id=None):
-        flags = self.by_id(box_id).flags
+    def flaglist(cls, box_id=None):
+        flags = cls.by_id(box_id).flags
         flaglist = OrderedDict()
         for flag in flags:
             flaglist[flag.uuid] = flag.name
@@ -178,11 +178,7 @@ class Box(DatabaseObject):
 
     @property
     def flags(self):
-        flags = []
-        for flag in self._flags:
-            if not flag.locked:
-                flags.append(flag)
-        return flags
+        return [flag for flag in self._flags if not flag.locked]
 
     @flags.setter
     def flags(self, flags):
@@ -239,22 +235,22 @@ class Box(DatabaseObject):
         if self._description is None:
             self._description = ""
         ls = []
-        if 0 < len(self._description):
+        if len(self._description) > 0:
             text = self._description.replace("\r\n", "\n").strip()
-            ls.append("%s" % text)
+            ls.append(f"{text}")
         else:
             ls.append("No information on file.")
         if self.difficulty != "Unknown":
-            ls.append("Reported Difficulty: %s" % self.difficulty)
+            ls.append(f"Reported Difficulty: {self.difficulty}")
         if not encode(ls[-1], "utf-8").endswith(b"\n"):
             ls[-1] = ls[-1] + "\n"
-        return str("\n\n".join(ls))
+        return "\n\n".join(ls)
 
     @description.setter
     def description(self, value):
         if value is None:
             return ""
-        if 1025 < len(value):
+        if len(value) > 1025:
             raise ValidationError("Description cannot be greater than 1024 characters")
         self._description = str(value)
 
@@ -270,7 +266,7 @@ class Box(DatabaseObject):
     def difficulty(self, value):
         if value is None:
             return
-        if 17 < len(value):
+        if len(value) > 17:
             raise ValidationError("Difficulty cannot be greater than 16 characters")
         self._difficulty = str(value)
 
@@ -284,9 +280,7 @@ class Box(DatabaseObject):
 
     @property
     def value(self):
-        if not self._value:
-            return 0
-        return self._value
+        return 0 if not self._value else self._value
 
     @value.setter
     def value(self, value):
@@ -297,15 +291,11 @@ class Box(DatabaseObject):
 
     def locked_corp(self):
         corp = Corporation.by_id(self.corporation_id)
-        if corp and corp.locked:
-            return True
-        return False
+        return bool(corp and corp.locked)
 
     def locked_level(self):
         level = GameLevel.by_id(self.game_level_id)
-        if level and level.locked:
-            return True
-        return False
+        return bool(level and level.locked)
 
     @property
     def locked(self):
@@ -314,9 +304,7 @@ class Box(DatabaseObject):
             return True
         if self.locked_level():
             return True
-        if self._locked == None:
-            return False
-        return self._locked
+        return False if self._locked is None else self._locked
 
     @locked.setter
     def locked(self, value):
@@ -334,41 +322,37 @@ class Box(DatabaseObject):
     def avatar(self):
         if self._avatar is not None:
             return self._avatar
-        else:
-            avatar = get_new_avatar("box")
-            if not avatar.startswith("default_"):
-                self._avatar = avatar
-                dbsession.add(self)
-                dbsession.commit()
-            return avatar
+        avatar = get_new_avatar("box")
+        if not avatar.startswith("default_"):
+            self._avatar = avatar
+            dbsession.add(self)
+            dbsession.commit()
+        return avatar
 
     @avatar.setter
     def avatar(self, image_data):
         if self.uuid is None:
             self.uuid = str(uuid4())
-        if len(image_data) < (1024 * 1024):
-            ext = imghdr.what("", h=image_data)
-            if ext in ["png", "jpeg", "gif", "bmp"] and not is_xss_image(image_data):
-                try:
-                    if self._avatar is not None and os.path.exists(
-                        options.avatar_dir + "/upload/" + self._avatar
-                    ):
-                        os.unlink(options.avatar_dir + "/upload/" + self._avatar)
-                    file_path = str(
-                        options.avatar_dir + "/upload/" + self.uuid + "." + ext
-                    )
-                    image = Image.open(io.BytesIO(image_data))
-                    cover = resizeimage.resize_cover(image, [500, 250])
-                    cover.save(file_path, image.format)
-                    self._avatar = "upload/" + self.uuid + "." + ext
-                except Exception as e:
-                    raise ValidationError(e)
-            else:
-                raise ValidationError(
-                    "Invalid image format, avatar must be: .png .jpeg .gif or .bmp"
-                )
-        else:
+        if len(image_data) >= 1024 * 1024:
             raise ValidationError("The image is too large")
+        ext = imghdr.what("", h=image_data)
+        if ext in ["png", "jpeg", "gif", "bmp"] and not is_xss_image(image_data):
+            try:
+                if self._avatar is not None and os.path.exists(
+                    f"{options.avatar_dir}/upload/{self._avatar}"
+                ):
+                    os.unlink(f"{options.avatar_dir}/upload/{self._avatar}")
+                file_path = str(f"{options.avatar_dir}/upload/{self.uuid}.{ext}")
+                image = Image.open(io.BytesIO(image_data))
+                cover = resizeimage.resize_cover(image, [500, 250])
+                cover.save(file_path, image.format)
+                self._avatar = f"upload/{self.uuid}.{ext}"
+            except Exception as e:
+                raise ValidationError(e)
+        else:
+            raise ValidationError(
+                "Invalid image format, avatar must be: .png .jpeg .gif or .bmp"
+            )
 
     @property
     def ipv4s(self):
@@ -396,17 +380,14 @@ class Box(DatabaseObject):
         return "[Bot]\nname = %s\ngarbage = %s\n" % (hex_name, self.garbage)
 
     def is_complete(self, user):
-        boxcomplete = True
-        for boxflag in self.flags:
-            if user.team and boxflag not in user.team.flags:
-                boxcomplete = False
-                break
-        return boxcomplete
+        return not any(
+            user.team and boxflag not in user.team.flags for boxflag in self.flags
+        )
 
     def to_xml(self, parent):
         """Convert object to XML"""
         box_elem = ET.SubElement(parent, "box")
-        box_elem.set("gamelevel", "%s" % str(self.game_level.number))
+        box_elem.set("gamelevel", f"{str(self.game_level.number)}")
         ET.SubElement(box_elem, "name").text = self.name
         ET.SubElement(box_elem, "operatingsystem").text = self._operating_system
         ET.SubElement(box_elem, "description").text = self._description
@@ -425,7 +406,7 @@ class Box(DatabaseObject):
                 self.category_id
             ).category
         flags_elem = ET.SubElement(box_elem, "flags")
-        flags_elem.set("count", "%s" % str(len(self.flags)))
+        flags_elem.set("count", f"{len(self.flags)}")
         for flag in self.flags_all:
             flag.to_xml(flags_elem)
         hints_elem = ET.SubElement(box_elem, "hints")
@@ -434,9 +415,9 @@ class Box(DatabaseObject):
             if hint.flag_id is None:
                 hint.to_xml(hints_elem)
                 count += 1
-        hints_elem.set("count", "%s" % str(count))
+        hints_elem.set("count", f"{str(count)}")
         ips_elem = ET.SubElement(box_elem, "ipaddresses")
-        ips_elem.set("count", "%s" % str(len(self.ip_addresses)))
+        ips_elem.set("count", f"{len(self.ip_addresses)}")
         for ip in self.ip_addresses:
             ip.to_xml(ips_elem)
         avatarfile = os.path.join(options.avatar_dir, self.avatar)
@@ -449,11 +430,7 @@ class Box(DatabaseObject):
 
     def to_dict(self):
         """Returns editable data as a dictionary"""
-        cat = self.category
-        if cat:
-            category = cat.uuid
-        else:
-            category = ""
+        category = cat.uuid if (cat := self.category) else ""
         return {
             "name": self.name,
             "uuid": self.uuid,
@@ -472,7 +449,7 @@ class Box(DatabaseObject):
         }
 
     def __repr__(self):
-        return "<Box - name: %s>" % (self.name,)
+        return f"<Box - name: {self.name}>"
 
     def __str__(self):
         return self.name

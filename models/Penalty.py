@@ -145,10 +145,9 @@ class Penalty(DatabaseObject):
         if not submission:
             submission = ""
         logging.debug("Creating flag '%s' attempt for %r" % (flag.id, team.name))
-        attempt = Penalty(
+        return Penalty(
             team_id=team.id, user_id=user.id, flag_id=flag.id, _token=submission
         )
-        return attempt
 
     def cost(self):
         if not options.penalize_flag_value:

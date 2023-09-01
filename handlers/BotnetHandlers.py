@@ -92,11 +92,11 @@ class BotSocketHandler(tornado.websocket.WebSocketHandler):
         box = Box.by_ip_address(self.request.remote_ip)
         self.remote_ip = self.request.remote_ip
         if box is None and self.config.whitelist_box_ips:
-            logging.debug("Rejected bot from '%s' (not a box)" % self.request.remote_ip)
+            logging.debug(f"Rejected bot from '{self.request.remote_ip}' (not a box)")
             self.write_message({"opcode": "error", "message": "Invalid IP address."})
             self.close()
         else:
-            logging.debug("Interrogating bot on %s" % self.request.remote_ip)
+            logging.debug(f"Interrogating bot on {self.request.remote_ip}")
             self.write_message({"opcode": "interrogate", "xid": str(self.xid)})
 
     def on_message(self, message):
@@ -106,18 +106,18 @@ class BotSocketHandler(tornado.websocket.WebSocketHandler):
             if "opcode" not in req:
                 raise ValueError("Missing opcode")
             elif req["opcode"] not in self.opcodes:
-                raise ValueError("Invalid opcode in request: %s" % req["opcode"])
+                raise ValueError(f'Invalid opcode in request: {req["opcode"]}')
             else:
                 self.opcodes[req["opcode"]](req)
         except ValueError as error:
-            logging.warning("Invalid json request from bot: %s" % str(error))
+            logging.warning(f"Invalid json request from bot: {str(error)}")
             self.close()
 
     def on_close(self):
         """Close connection to remote host"""
         if self.uuid in self.bot_manager.botnet:
             self.bot_manager.remove_bot(self)
-        logging.debug("Closing connection to bot at %s" % self.request.remote_ip)
+        logging.debug(f"Closing connection to bot at {self.request.remote_ip}")
 
     def interrogation_response(self, msg):
         """Steps 3 and 4; validate responses"""
@@ -143,7 +143,7 @@ class BotSocketHandler(tornado.websocket.WebSocketHandler):
     def add_to_botnet(self, user):
         """Step 6 and 7; Add current web socket to botnet"""
         if self.bot_manager.add_bot(self):
-            logging.debug("Auth okay, adding '%s' to botnet" % self.uuid)
+            logging.debug(f"Auth okay, adding '{self.uuid}' to botnet")
             count = self.bot_manager.count_by_team(self.team_name)
             self.write_message(
                 {
@@ -153,7 +153,7 @@ class BotSocketHandler(tornado.websocket.WebSocketHandler):
             )
             self.event_manager.bot_added(user, count)
         else:
-            logging.debug("Duplicate bot on %s" % self.remote_ip)
+            logging.debug(f"Duplicate bot on {self.remote_ip}")
             self.send_error("Duplicate bot")
 
     def is_valid_xid(self, box, response_xid):
@@ -192,7 +192,7 @@ class BotCliMonitorSocketHandler(tornado.websocket.WebSocketHandler):
             self.opcodes = {"auth": self.auth}
 
     def open(self):
-        logging.debug("Opened new monitor socket to %s" % self.request.remote_ip)
+        logging.debug(f"Opened new monitor socket to {self.request.remote_ip}")
 
     def on_message(self, message):
         """Parse request"""
@@ -201,18 +201,16 @@ class BotCliMonitorSocketHandler(tornado.websocket.WebSocketHandler):
             if "opcode" not in req:
                 raise ValueError("Missing opcode")
             elif req["opcode"] not in self.opcodes:
-                raise ValueError("Invalid opcode in request: %s" % req["opcode"])
+                raise ValueError(f'Invalid opcode in request: {req["opcode"]}')
             else:
                 self.opcodes[req["opcode"]](req)
         except ValueError as error:
-            logging.warning("Invalid json request from bot: %s" % str(error))
+            logging.warning(f"Invalid json request from bot: {str(error)}")
 
     def on_close(self):
         """Close connection to remote host"""
         self.bot_manager.remove_monitor(self)
-        logging.debug(
-            "Closing connection to bot monitor at %s" % self.request.remote_ip
-        )
+        logging.debug(f"Closing connection to bot monitor at {self.request.remote_ip}")
 
     def auth(self, req):
         """Authenticate user"""
@@ -227,9 +225,7 @@ class BotCliMonitorSocketHandler(tornado.websocket.WebSocketHandler):
             )
             self.close()
         elif user.validate_password(req.get("password", "")):
-            logging.debug(
-                "Monitor socket successfully authenticated as %s" % user.handle
-            )
+            logging.debug(f"Monitor socket successfully authenticated as {user.handle}")
             self.team_name = "".join(user.team.name)
             self.bot_manager.add_monitor(self)
             self.write_message({"opcode": "auth_success"})
@@ -284,9 +280,7 @@ class BotWebMonitorSocketHandler(BaseWebSocketHandler):
         """Only open sockets from authenticated clients"""
         user = self.get_current_user()
         if self.session is not None and ("team_id" in self.session or user.is_admin()):
-            logging.debug(
-                "[Web Socket] Opened web monitor socket with %s" % user.handle
-            )
+            logging.debug(f"[Web Socket] Opened web monitor socket with {user.handle}")
             self.uuid = str(uuid4())
             self.bot_manager = BotManager.instance()
 
@@ -301,14 +295,14 @@ class BotWebMonitorSocketHandler(BaseWebSocketHandler):
             self.update(bots)
         else:
             logging.debug(
-                "[Web Socket] Denied web monitor socket to %s" % self.request.remote_ip
+                f"[Web Socket] Denied web monitor socket to {self.request.remote_ip}"
             )
             self.bot_manager = None
             self.close()
 
     def on_message(self, message):
         user = self.get_current_user()
-        logging.debug("%s is send us websocket messages." % user.handle)
+        logging.debug(f"{user.handle} is send us websocket messages.")
 
     def update(self, boxes):
         """Called by observable class"""

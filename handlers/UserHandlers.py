@@ -55,10 +55,7 @@ class HomeHandler(BaseHandler):
     def get(self, *args, **kwargs):
         """Display the default user page"""
         user = self.get_current_user()
-        if user:
-            admin = user.is_admin()
-        else:
-            admin = False
+        admin = user.is_admin() if user else False
         uuid = self.get_argument("id", None)
         display_user = User.by_uuid(uuid)
         visitor = False
@@ -89,11 +86,14 @@ class HomeHandler(BaseHandler):
             )
         else:
             game_started = self.application.settings["game_started"] or user.is_admin()
-            rank = len(gamestate) + 1
-            for i, team in enumerate(gamestate):
-                if team == user.team.name:
-                    rank = i + 1
-                    break
+            rank = next(
+                (
+                    i + 1
+                    for i, team in enumerate(gamestate)
+                    if team == user.team.name
+                ),
+                len(gamestate) + 1,
+            )
             self.render(
                 "user/home.html",
                 user=user,
@@ -294,15 +294,13 @@ class SettingsHandler(BaseHandler):
         else:
             self.render_page(
                 errors=[
-                    "Invalid password - max length %s."
-                    % str(options.max_password_length)
+                    f"Invalid password - max length {str(options.max_password_length)}."
                 ]
             )
 
     def verify_recaptcha(self):
         """Checks recaptcha"""
-        recaptcha_response = self.get_argument("g-recaptcha-response", None)
-        if recaptcha_response:
+        if recaptcha_response := self.get_argument("g-recaptcha-response", None):
             recaptcha_req_data = {
                 "secret": self.config.recaptcha_secret_key,
                 "remoteip": self.request.remote_ip,

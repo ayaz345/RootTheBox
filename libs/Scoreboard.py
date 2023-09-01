@@ -143,7 +143,7 @@ def score_bots():
     for team in Team.all():
         if not team.locked:
             bots = bot_manager.by_team(team.name)
-            if 0 < len(bots):
+            if len(bots) > 0:
                 reward = 0
                 for bot in bots:
                     try:
@@ -155,9 +155,7 @@ def score_bots():
                             }
                         )
                     except:
-                        logging.info(
-                            "Bot at %s failed to respond to score ping" % bot.remote_ip
-                        )
+                        logging.info(f"Bot at {bot.remote_ip} failed to respond to score ping")
 
                 message = "%s was awarded $%d for controlling %s bot(s)" % (
                     team.name,

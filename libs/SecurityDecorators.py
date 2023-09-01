@@ -37,12 +37,10 @@ def apikey(method):
                 apikey = value
         if apikey and apikey in options.api_keys:
             return method(self, *args, **kwargs)
-        else:
-            logging.warning(
-                "Attempted unauthorized access from %s to %s"
-                % (self.request.remote_ip, self.request.uri)
-            )
-            self.redirect(self.application.settings["forbidden_url"])
+        logging.warning(
+            f"Attempted unauthorized access from {self.request.remote_ip} to {self.request.uri}"
+        )
+        self.redirect(self.application.settings["forbidden_url"])
 
     return wrapper
 
@@ -74,9 +72,7 @@ def authenticated(method):
                     self.clear_all_cookies()
                     self.redirect(self.application.settings["login_url"])
             else:
-                logging.warning(
-                    "Session hijack attempt from %s?" % (self.request.remote_ip,)
-                )
+                logging.warning(f"Session hijack attempt from {self.request.remote_ip}?")
                 self.session.delete()
                 self.clear_all_cookies()
                 self.redirect(self.application.settings["login_url"])
@@ -110,12 +106,10 @@ def restrict_ip_address(method):
             or self.request.remote_ip in self.application.settings["admin_ips"]
         ):
             return method(self, *args, **kwargs)
-        else:
-            logging.warning(
-                "Attempted unauthorized access from %s to %s"
-                % (self.request.remote_ip, self.request.uri)
-            )
-            self.redirect(self.application.settings["forbidden_url"])
+        logging.warning(
+            f"Attempted unauthorized access from {self.request.remote_ip} to {self.request.uri}"
+        )
+        self.redirect(self.application.settings["forbidden_url"])
 
     return wrapper
 
@@ -125,16 +119,14 @@ def blacklist_ips(method):
     def wrapper(self, *args, **kwargs):
         if self.request.remote_ip not in self.application.settings["blacklisted_ips"]:
             return method(self, *args, **kwargs)
-        else:
-            self.render(
-                "public/login.html",
-                info=None,
-                errors=["Your IP address is currently banned - Contact Admin"],
-            )
-            logging.warning(
-                "[BAN HAMMER] Login attempt from blacklisted IP %s"
-                % self.request.remote_ip
-            )
+        self.render(
+            "public/login.html",
+            info=None,
+            errors=["Your IP address is currently banned - Contact Admin"],
+        )
+        logging.warning(
+            f"[BAN HAMMER] Login attempt from blacklisted IP {self.request.remote_ip}"
+        )
 
     return wrapper
 
@@ -150,8 +142,7 @@ def authorized(permission):
                 if user is not None and user.has_permission(permission):
                     return method(self, *args, **kwargs)
             logging.warning(
-                "Attempted unauthorized access from %s to %s"
-                % (self.request.remote_ip, self.request.uri)
+                f"Attempted unauthorized access from {self.request.remote_ip} to {self.request.uri}"
             )
             self.redirect(self.application.settings["forbidden_url"])
 
@@ -166,9 +157,9 @@ def debug(method):
     @functools.wraps(method)
     def wrapper(*args, **kwargs):
         class_name = args[0].__class__.__name__
-        logging.debug("Call to -> %s.%s()" % (class_name, method.__name__))
+        logging.debug(f"Call to -> {class_name}.{method.__name__}()")
         value = method(*args, **kwargs)
-        logging.debug("Return from <- %s.%s()" % (class_name, method.__name__))
+        logging.debug(f"Return from <- {class_name}.{method.__name__}()")
         return value
 
     return wrapper
@@ -183,12 +174,10 @@ def has_item(name):
             user = self.get_current_user()
             if user is not None and user.has_item(name):
                 return method(self, *args, **kwargs)
-            else:
-                logging.warning(
-                    "Attempted unauthorized access from %s to %s"
-                    % (self.request.remote_ip, self.request.uri)
-                )
-                self.redirect(self.application.settings["forbidden_url"])
+            logging.warning(
+                f"Attempted unauthorized access from {self.request.remote_ip} to {self.request.uri}"
+            )
+            self.redirect(self.application.settings["forbidden_url"])
 
         return wrapper
 
@@ -203,12 +192,10 @@ def item_allowed(name):
         def wrapper(self, *args, **kwargs):
             if name in options.allowed_market_items:
                 return method(self, *args, **kwargs)
-            else:
-                logging.warning(
-                    "Attempted unauthorized access from %s to %s"
-                    % (self.request.remote_ip, self.request.uri)
-                )
-                self.redirect(self.application.settings["forbidden_url"])
+            logging.warning(
+                f"Attempted unauthorized access from {self.request.remote_ip} to {self.request.uri}"
+            )
+            self.redirect(self.application.settings["forbidden_url"])
 
         return wrapper
 

@@ -54,7 +54,7 @@ class FlagAttachment(DatabaseObject):
 
     @property
     def data(self):
-        with open(options.flag_attachment_dir + "/" + self.uuid, "rb") as fp:
+        with open(f"{options.flag_attachment_dir}/{self.uuid}", "rb") as fp:
             return decode(fp.read(), "base64")
 
     @data.setter
@@ -62,19 +62,19 @@ class FlagAttachment(DatabaseObject):
         if self.uuid is None:
             self.uuid = str(uuid4())
         self.byte_size = len(value)
-        with open(options.flag_attachment_dir + "/" + self.uuid, "wb") as fp:
+        with open(f"{options.flag_attachment_dir}/{self.uuid}", "wb") as fp:
             fp.write(str(encode(value, "base64")).encode())
 
     def delete_data(self):
         """Remove the file from the file system, if it exists"""
-        fpath = options.flag_attachment_dir + "/" + self.uuid
+        fpath = f"{options.flag_attachment_dir}/{self.uuid}"
         if os.path.exists(fpath) and os.path.isfile(fpath):
             os.unlink(fpath)
 
     def to_xml(self, parent):
         attachment_elem = ET.SubElement(parent, "flag_attachment")
         ET.SubElement(attachment_elem, "file_name").text = self.file_name
-        with open(options.flag_attachment_dir + "/" + self.uuid, mode="rb") as fp:
+        with open(f"{options.flag_attachment_dir}/{self.uuid}", mode="rb") as fp:
             data = fp.read()
             ET.SubElement(attachment_elem, "data").text = encode(data, "base64")
 

@@ -165,8 +165,7 @@ def setdefaulttimeout(timeout):
     """
     global default_timeout
     default_timeout = int(timeout)
-    if default_timeout < 30:
-        default_timeout = 30
+    default_timeout = max(default_timeout, 30)
     logging.info("Socket timeout set to: %d" % timeout)
 
 
@@ -194,10 +193,7 @@ def _parse_url(url):
         hostname = parsed.hostname
     else:
         raise ValueError("hostname is invalid")
-    port = 0
-    if parsed.port:
-        port = parsed.port
-
+    port = parsed.port if parsed.port else 0
     is_secure = False
     if scheme == "ws":
         if not port:
@@ -207,15 +203,11 @@ def _parse_url(url):
         if not port:
             port = 443
     else:
-        raise ValueError("scheme %s is invalid" % scheme)
+        raise ValueError(f"scheme {scheme} is invalid")
 
-    if parsed.path:
-        resource = parsed.path
-    else:
-        resource = "/"
-
+    resource = parsed.path if parsed.path else "/"
     if parsed.query:
-        resource += "?" + parsed.query
+        resource += f"?{parsed.query}"
 
     return (hostname, port, resource, is_secure)
 
@@ -281,11 +273,7 @@ _BOOL_VALUES = (0, 1)
 
 
 def _is_bool(*values):
-    for v in values:
-        if v not in _BOOL_VALUES:
-            return False
-
-    return True
+    return all(v in _BOOL_VALUES for v in values)
 
 
 class ABNF(object):
@@ -385,9 +373,8 @@ class ABNF(object):
 
         if not self.mask:
             return frame_header + self.data
-        else:
-            mask_key = self.get_mask_key(4)
-            return frame_header + self._get_masked(mask_key)
+        mask_key = self.get_mask_key(4)
+        return frame_header + self._get_masked(mask_key)
 
     def _get_masked(self, mask_key):
         s = ABNF.mask(mask_key, self.data)
@@ -499,30 +486,27 @@ class WebSocket(object):
 
     def _handshake(self, host, port, resource, **options):
         sock = self.io_sock
-        headers = []
-        headers.append("GET %s HTTP/1.1" % resource)
-        headers.append("Upgrade: websocket")
-        headers.append("Connection: Upgrade")
-        if port == 80:
-            hostport = host
-        else:
-            hostport = "%s:%d" % (host, port)
-        headers.append("Host: %s" % hostport)
+        headers = [
+            f"GET {resource} HTTP/1.1",
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+        ]
+        hostport = host if port == 80 else "%s:%d" % (host, port)
+        headers.append(f"Host: {hostport}")
 
         if "origin" in options:
-            headers.append("Origin: %s" % options["origin"])
+            headers.append(f'Origin: {options["origin"]}')
         else:
-            headers.append("Origin: http://%s" % hostport)
+            headers.append(f"Origin: http://{hostport}")
 
         key = _create_sec_websocket_key()
-        headers.append("Sec-WebSocket-Key: %s" % key)
-        headers.append("Sec-WebSocket-Version: %s" % VERSION)
+        headers.extend(
+            (f"Sec-WebSocket-Key: {key}", f"Sec-WebSocket-Version: {VERSION}")
+        )
         if "header" in options:
             headers.extend(options["header"])
 
-        headers.append("")
-        headers.append("")
-
+        headers.extend(("", ""))
         header_str = "\r\n".join(headers)
         sock.send(header_str)
         if traceEnabled:
@@ -556,7 +540,7 @@ class WebSocket(object):
             return False
         result = result.lower()
 
-        value = key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+        value = f"{key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
         hashed = base64.encodestring(hashlib.sha1(value).digest()).strip().lower()
         return hashed == result
 
@@ -578,12 +562,11 @@ class WebSocket(object):
                 status = int(status_info[1])
             else:
                 kv = line.split(":", 1)
-                if len(kv) == 2:
-                    key, value = kv
-                    headers[key.lower()] = value.strip().lower()
-                else:
+                if len(kv) != 2:
                     raise WebSocketException("Invalid header")
 
+                key, value = kv
+                headers[key.lower()] = value.strip().lower()
         if traceEnabled:
             logger.debug("-----------------------")
 
@@ -607,7 +590,7 @@ class WebSocket(object):
             l = self.io_sock.send(data)
             data = data[l:]
         if traceEnabled:
-            logger.debug("send: " + repr(data))
+            logger.debug(f"send: {repr(data)}")
 
     def ping(self, payload=""):
         """
@@ -648,7 +631,7 @@ class WebSocket(object):
             if not frame:
                 # handle error:
                 # 'NoneType' object has no attribute 'opcode'
-                raise WebSocketException("Not a valid frame %s" % frame)
+                raise WebSocketException(f"Not a valid frame {frame}")
             elif frame.opcode in (ABNF.OPCODE_TEXT, ABNF.OPCODE_BINARY):
                 return (frame.opcode, frame.data)
             elif frame.opcode == ABNF.OPCODE_CLOSE:
@@ -684,19 +667,16 @@ class WebSocket(object):
             length_data = self._recv_strict(8)
             length = struct.unpack("!Q", length_data)[0]
 
-        mask_key = ""
-        if mask:
-            mask_key = self._recv_strict(4)
+        mask_key = self._recv_strict(4) if mask else ""
         data = self._recv_strict(length)
         if traceEnabled:
             received = header_bytes + length_data + mask_key + data
-            logger.debug("recv: " + repr(received))
+            logger.debug(f"recv: {repr(received)}")
 
         if mask:
             data = ABNF.mask(mask_key, data)
 
-        frame = ABNF(fin, rsv1, rsv2, rsv3, opcode, mask, data)
-        return frame
+        return ABNF(fin, rsv1, rsv2, rsv3, opcode, mask, data)
 
     def send_close(self, status=STATUS_NORMAL, reason=""):
         """
@@ -731,7 +711,7 @@ class WebSocket(object):
                     if logger.isEnabledFor(logging.ERROR):
                         recv_status = struct.unpack("!H", frame.data)[0]
                         if recv_status != STATUS_NORMAL:
-                            logger.error("close status: " + repr(recv_status))
+                            logger.error(f"close status: {repr(recv_status)}")
                 except:
                     pass
                 self.sock.settimeout(timeout)
@@ -746,10 +726,10 @@ class WebSocket(object):
         self.io_sock = self.sock
 
     def _recv(self, bufsize):
-        bytes = self.io_sock.recv(bufsize)
-        if not bytes:
+        if bytes := self.io_sock.recv(bufsize):
+            return bytes
+        else:
             raise WebSocketConnectionClosedException()
-        return bytes
 
     def _recv_strict(self, bufsize):
         remaining = bufsize
@@ -896,10 +876,11 @@ def stop_animate_thread(ws):
 
 def update(ws, message):
     """Recv and draw latest update"""
-    logging.debug("Got update: %s" % message)
-    bots = []
-    for bot in message["bots"]:
-        bots.append((bot["box_name"], bot["remote_ip"], bot["total_reward"]))
+    logging.debug(f"Got update: {message}")
+    bots = [
+        (bot["box_name"], bot["remote_ip"], bot["total_reward"])
+        for bot in message["bots"]
+    ]
     ws.monitor.update_grid(bots)
 
 
@@ -924,11 +905,12 @@ def ping(ws, message):
     ws.monitor.pong = True
 
 
-OPCODES = {}
-OPCODES["update"] = update
-OPCODES["auth_success"] = auth_success
-OPCODES["auth_failure"] = auth_failure
-OPCODES["ping"] = ping
+OPCODES = {
+    "update": update,
+    "auth_success": auth_success,
+    "auth_failure": auth_failure,
+    "ping": ping,
+}
 
 
 ###################
@@ -946,7 +928,7 @@ def on_open(ws):
 
 def on_message(ws, message):
     """Parse message and call a function"""
-    logging.debug("Recv'd message: %s" % str(message))
+    logging.debug(f"Recv'd message: {str(message)}")
     try:
         response = json.loads(message)
         if "opcode" not in response:
@@ -961,11 +943,9 @@ def on_message(ws, message):
 
 def on_error(ws, error):
     """Error recv'd on WebSocket"""
-    logging.exception("[WebSocket] on_error - %s" % type(error))
+    logging.exception(f"[WebSocket] on_error - {type(error)}")
     stop_animate_thread(ws)
-    if isinstance(error, socket.error):
-        ws.monitor.connection_problems()
-    elif isinstance(error, WebSocketException):
+    if isinstance(error, (socket.error, WebSocketException)):
         ws.monitor.connection_problems()
     ws.monitor.stop()
 
@@ -1009,7 +989,7 @@ class BotMonitor(object):
 
     def stop(self, message=None):
         """Gracefully exits the program"""
-        logging.debug("Stopping curses ui: %s" % message)
+        logging.debug(f"Stopping curses ui: {message}")
         self.__clear__()
         curses.endwin()
         os._exit(0)
@@ -1094,7 +1074,7 @@ class BotMonitor(object):
         self.screen.addstr(0, start_x - 1, "|", curses.A_BOLD)
         self.screen.addstr(0, start_x + len(title), "|", curses.A_BOLD)
         # Bottom bar
-        display_time = "[ %s ]" % current_time()
+        display_time = f"[ {current_time()} ]"
         self.screen.addstr(
             self.max_y - 1, (self.max_x - len(display_time)) - 3, display_time
         )
@@ -1132,7 +1112,7 @@ class BotMonitor(object):
     def update_grid(self, boxes):
         """Redraw the grid with updated box information"""
         self.__interface__()
-        update_income = sum([box[2] for box in boxes])
+        update_income = sum(box[2] for box in boxes)
         self.total_income += update_income
         self.__summary__(len(boxes), current_time())
         start_row = 5
@@ -1141,7 +1121,7 @@ class BotMonitor(object):
                 start_row + index, self.start_ip_pos, "%d) %s" % (index + 1, box[0])
             )
             self.screen.addstr(start_row + index, self.start_name_pos, box[1])
-            if 0 < float(update_income):
+            if float(update_income) > 0:
                 percent = (old_div(float(box[2]), float(update_income))) * 100.0
                 income_string = "$%d  (%.02d%s)" % (box[2], percent, "%")
             else:
@@ -1154,7 +1134,7 @@ class BotMonitor(object):
         start_pos = 3
         pos_y = 1
         self.screen.addstr(
-            pos_y, start_pos, "- Last Update: %s -" % update_time, curses.A_BOLD
+            pos_y, start_pos, f"- Last Update: {update_time} -", curses.A_BOLD
         )
         bot_string = "$%d (%d bots)" % (self.total_income, bot_count)
         bot_pos = self.max_x - (len(bot_string) + 3)
@@ -1230,18 +1210,18 @@ class BotMonitor(object):
             time.sleep(0.1)
             if self.stop_thread:
                 return
-        self.screen.addstr(2, 2, sat_com + "success")
+        self.screen.addstr(2, 2, f"{sat_com}success")
         self.screen.refresh()
         # (3) Uplink animation
         download = " > Establishing satellite uplink: "
-        for index in range(5, 25):
+        for _ in range(5, 25):
             signal = random.randint(0, 30)
             self.screen.addstr(3, 2, download + str(signal) + " dBi    ")
             self.screen.refresh()
             time.sleep(0.2)
             if self.stop_thread:
                 return
-        self.screen.addstr(3, 2, download + "locked on")
+        self.screen.addstr(3, 2, f"{download}locked on")
         self.screen.refresh()
         # (4) Downloading animation
         download = " > Downloading noki telcodes: "
@@ -1251,7 +1231,7 @@ class BotMonitor(object):
             time.sleep(0.1)
             if self.stop_thread:
                 return
-        self.screen.addstr(4, 2, download + "complete")
+        self.screen.addstr(4, 2, f"{download}complete")
         self.screen.refresh()
         # (5) Initializing memory address
         memory = " > Initializing memory: "
@@ -1287,9 +1267,9 @@ class BotMonitor(object):
                 self.pong = False
             else:
                 index += 1
-                progress_string = "[%s]" % (progress_bar[index % len(progress_bar)])
+                progress_string = f"[{progress_bar[index % len(progress_bar)]}]"
                 self.screen.addstr(self.max_y - 1, 3, progress_string)
-            display_time = "[ %s ]" % current_time()
+            display_time = f"[ {current_time()} ]"
             self.screen.addstr(
                 self.max_y - 1, (self.max_x - len(display_time)) - 3, display_time
             )
@@ -1301,7 +1281,7 @@ class BotMonitor(object):
         logging.info("Displaying auth failure message")
         self.__clear__()
         self.screen.refresh()
-        prompt = " *** %s *** " % msg
+        prompt = f" *** {msg} *** "
         access_denied = curses.newwin(
             3,
             len(prompt) + 2,
@@ -1311,7 +1291,7 @@ class BotMonitor(object):
         access_denied.addstr(1, 1, prompt, curses.A_BOLD | curses.color_pair(self.RED))
         access_denied.refresh()
         time.sleep(0.75)
-        for index in range(0, 5):
+        for _ in range(0, 5):
             access_denied.addstr(1, 1, " " * len(prompt))
             access_denied.refresh()
             time.sleep(0.25)
@@ -1336,10 +1316,10 @@ def main(domain, port, secure, log_file, log_level):
     logger.setLevel(lvl)
     enableTrace(True)
     if not secure:
-        url = "ws://%s:%s%s" % (domain, port, __path__)
+        url = f"ws://{domain}:{port}{__path__}"
     else:
-        url = "wss://%s:%s%s" % (domain, port, __path__)
-    logging.info("Connecting to %s" % url)
+        url = f"wss://{domain}:{port}{__path__}"
+    logging.info(f"Connecting to {url}")
     bot_monitor = BotMonitor(url)
     try:
         bot_monitor.start()
@@ -1354,7 +1334,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Root the Box: Botnet Monitor")
     parser.add_argument(
-        "--version", action="version", version="%(prog)s v" + __version__
+        "--version", action="version", version=f"%(prog)s v{__version__}"
     )
     parser.add_argument(
         "--secure",
@@ -1365,21 +1345,21 @@ if __name__ == "__main__":
     parser.add_argument(
         "--domain",
         "-d",
-        help="scoring engine ip address, or domain (default: %s)" % __domain__,
+        help=f"scoring engine ip address, or domain (default: {__domain__})",
         default=__domain__,
         dest="domain",
     )
     parser.add_argument(
         "--port",
         "-p",
-        help="network port to connect to (default: %s)" % __port__,
+        help=f"network port to connect to (default: {__port__})",
         default=__port__,
         dest="port",
     )
     parser.add_argument(
         "--log-file",
         "-f",
-        help="log to file (default: %s)" % __log__,
+        help=f"log to file (default: {__log__})",
         default=__log__,
         dest="log_file",
     )

@@ -80,7 +80,7 @@ class FlagChoice(DatabaseObject):
     @classmethod
     def _create(cls, flag, choice):
         """Create a choice and save it to the database"""
-        logging.debug("Creating flag '%s' choice" % (flag.id))
+        logging.debug(f"Creating flag '{flag.id}' choice")
         return cls(flag_id=flag.id, _choice=choice)
 
     @property

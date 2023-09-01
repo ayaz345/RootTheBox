@@ -51,7 +51,7 @@ def start():
 
         update_db()
     except Exception as error:
-        logging.error("Error: %s" % error)
+        logging.error(f"Error: {error}")
         if "Can't locate revision identified" not in str(error):
             # Skipped if alembic record ahead for branch compatibility
             os._exit(1)
@@ -61,16 +61,15 @@ def start():
 
     prefix = "https://" if options.ssl else "http://"
     # TODO For docker, it would be nice to grab the mapped docker port
-    listenport = C + "%slocalhost:%s" % (prefix, str(options.listen_port)) + W
+    listenport = f"{C}{prefix}localhost:{str(options.listen_port)}{W}"
     sys.stdout.flush()
     try:
-        print(INFO + bold + R + "Starting RTB on %s" % listenport, flush=True)
+        print(INFO + bold + R + f"Starting RTB on {listenport}", flush=True)
     except TypeError:
-        print(INFO + bold + R + "Starting RTB on %s" % listenport)
+        print(INFO + bold + R + f"Starting RTB on {listenport}")
     if len(options.mail_host) > 0 and "localhost" in options.origin:
         logging.warning(
-            "%sWARNING:%s Invalid 'origin' configuration (localhost) for Email support %s"
-            % (WARN + bold + R, W, WARN)
+            f"{WARN + bold + R}WARNING:{W} Invalid 'origin' configuration (localhost) for Email support {WARN}"
         )
 
     result = start_server()
@@ -87,14 +86,14 @@ def setup():
     """
     is_devel = options.setup.startswith("dev")
     if is_devel:
-        print("%sWARNING:%s Setup is in development mode %s" % (WARN + bold, W, WARN))
+        print(f"{WARN + bold}WARNING:{W} Setup is in development mode {WARN}")
         message = "I know what the fuck I am doing"
-        resp = input(PROMPT + 'Please type "%s": ' % message)
+        resp = input(f'{PROMPT}Please type "{message}": ')
         if resp.replace('"', "").lower().strip() != message.lower():
             os._exit(1)
     else:
         is_devel = options.setup.startswith("docker")
-    print(INFO + "%s : Creating the database ..." % current_time())
+    print(f"{INFO}{current_time()} : Creating the database ...")
     from setup.create_database import create_tables, engine, metadata
 
     create_tables(engine, metadata, options.log_sql)
@@ -104,39 +103,39 @@ def setup():
 
     themes = Theme.all()
     if len(themes) > 0:
-        print(INFO + "It looks like database has already been set up.")
+        print(f"{INFO}It looks like database has already been set up.")
         return
 
-    print(INFO + "%s : Bootstrapping the database ..." % current_time())
+    print(f"{INFO}{current_time()} : Bootstrapping the database ...")
     import setup.bootstrap
 
     # Display Details
     if is_devel:
         environ = bold + R + "Development bootstrap:"
-        details = C + "Admin Username: admin, Password: rootthebox" + W
+        details = f"{C}Admin Username: admin, Password: rootthebox{W}"
     else:
-        environ = bold + "Production bootstrap" + W
+        environ = f"{bold}Production bootstrap{W}"
         details = ""
     from handlers import update_db
 
     update_db(False)
     sys.stdout.flush()
     try:
-        print(INFO + "%s %s" % (environ, details), flush=True)
+        print(f"{INFO}{environ} {details}", flush=True)
     except:
-        print(INFO + "%s %s" % (environ, details))
+        print(f"{INFO}{environ} {details}")
 
 
 def recovery():
     """Starts the recovery console"""
     from setup.recovery import RecoveryConsole
 
-    print(INFO + "%s : Starting recovery console ..." % current_time())
+    print(f"{INFO}{current_time()} : Starting recovery console ...")
     console = RecoveryConsole()
     try:
         console.cmdloop()
     except KeyboardInterrupt:
-        print(INFO + "Have a nice day!")
+        print(f"{INFO}Have a nice day!")
 
 
 def setup_xml(xml_params):
@@ -148,7 +147,7 @@ def setup_xml(xml_params):
             INFO + "Processing %d of %d .xml file(s) ..." % (index + 1, len(xml_params))
         )
         import_xml(xml_param)
-    print(INFO + "%s : Completed processing of all .xml file(s)" % (current_time()))
+    print(f"{INFO}{current_time()} : Completed processing of all .xml file(s)")
 
 
 def generate_teams(num_teams):
@@ -157,7 +156,7 @@ def generate_teams(num_teams):
 
     for i in range(0, num_teams):
         team = Team()
-        team.name = "Team " + str(i + 1)
+        team.name = f"Team {str(i + 1)}"
         dbsession.add(team)
         dbsession.flush()
     dbsession.commit()
@@ -199,12 +198,12 @@ def generate_admins(admin_names):
 
 def tests():
     """Creates a temporary sqlite database and runs the unit tests"""
-    print(INFO + "%s : Running unit tests ..." % current_time())
+    print(f"{INFO}{current_time()} : Running unit tests ...")
     from tests import setup_database, teardown_database
 
     db_name = "test-%04s" % random.randint(0, 9999)
     setup_database(db_name)
-    nose.run(module="tests", argv=[os.getcwd() + "/tests"])
+    nose.run(module="tests", argv=[f"{os.getcwd()}/tests"])
     teardown_database(db_name)
 
 
@@ -227,16 +226,16 @@ def version():
     from sqlalchemy import __version__ as orm_version
     from tornado import version as tornado_version
 
-    print(bold + "Root the Box%s v%s" % (W, __version__))
-    print(bold + " SQL Alchemy%s v%s" % (W, orm_version))
-    print(bold + "     Torando%s v%s" % (W, tornado_version))
+    print(f"{bold}Root the Box{W} v{__version__}")
+    print(f"{bold} SQL Alchemy{W} v{orm_version}")
+    print(f"{bold}     Torando{W} v{tornado_version}")
 
 
 def check_cwd():
     """Checks to make sure the cwd is the application root directory"""
     app_root = os.path.dirname(os.path.abspath(__file__))
     if app_root != os.getcwd():
-        print(INFO + "Switching CWD to '%s'" % app_root)
+        print(f"{INFO}Switching CWD to '{app_root}'")
         os.chdir(app_root)
 
 
@@ -251,45 +250,33 @@ def options_parse_environment():
     for item in options.as_dict():
         config = os.environ.get(item.upper(), os.environ.get(item, None))
         if config is not None:
-            if item in images:
-                value = save_config_image(config)
-            else:
-                value = config
+            value = save_config_image(config) if item in images else config
             value = set_type(value, options[item])
             if isinstance(value, type(options[item])):
-                logging.info(
-                    "Environment Configuration (%s): %s" % (item.upper(), value)
-                )
+                logging.info(f"Environment Configuration ({item.upper()}): {value}")
                 options[item] = value
             else:
                 logging.error(
-                    "Environment Configuration (%s): unable to convert type %s to %s for %s"
-                    % (item.upper(), type(value), type(options[item]), value)
+                    f"Environment Configuration ({item.upper()}): unable to convert type {type(value)} to {type(options[item])} for {value}"
                 )
 
 
 def help():
     help_response = [
-        "\tNo options specified. Examples: 'rootthebox.py --setup=prod' or 'rootthebox.py --start'"
+        "\tNo options specified. Examples: 'rootthebox.py --setup=prod' or 'rootthebox.py --start'",
+        "\t\t--recovery\tstart the recovery console",
+        "\t\t--reset\tkeeps teams / players and resets the game to start",
+        "\t\t--reset-delete\tdeletes teams / players and resets the game to start",
+        "\t\t--restart\trestart the server",
+        "\t\t--save\t\tsave the current configuration to file",
+        "\t\t--setup\t\tsetup a database (prod|devel|docker)",
+        "\t\t--start\t\tstart the server",
+        "\t\t--tests\t\trun the unit tests",
+        "\t\t--update\tpull the latest code via github",
+        "\t\t--version\tdisplay version information and exit",
+        "\t\t--xml\t\timport xml file(s)",
+        "\t\t--config\tconfiguration file location (default: files/rootthebox.cfg)",
     ]
-    help_response.append("\t\t--recovery\tstart the recovery console")
-    help_response.append(
-        "\t\t--reset\tkeeps teams / players and resets the game to start"
-    )
-    help_response.append(
-        "\t\t--reset-delete\tdeletes teams / players and resets the game to start"
-    )
-    help_response.append("\t\t--restart\trestart the server")
-    help_response.append("\t\t--save\t\tsave the current configuration to file")
-    help_response.append("\t\t--setup\t\tsetup a database (prod|devel|docker)")
-    help_response.append("\t\t--start\t\tstart the server")
-    help_response.append("\t\t--tests\t\trun the unit tests")
-    help_response.append("\t\t--update\tpull the latest code via github")
-    help_response.append("\t\t--version\tdisplay version information and exit")
-    help_response.append("\t\t--xml\t\timport xml file(s)")
-    help_response.append(
-        "\t\t--config\tconfiguration file location (default: files/rootthebox.cfg)"
-    )
     return "\n".join(help_response)
 
 
@@ -1142,10 +1129,11 @@ if __name__ == "__main__":
     if options.version:
         version()
     elif options.setup.startswith("docker"):
-        if not os.path.isfile(options.config) or (
-            options.sql_dialect == "sqlite"
+        if (
+            not os.path.isfile(options.config)
+            or options.sql_dialect == "sqlite"
             and not os.path.isfile(options.sql_database)
-            and not os.path.isfile("%s.db" % options.sql_database)
+            and not os.path.isfile(f"{options.sql_database}.db")
         ):
             logging.info("Running Docker Setup")
             if os.path.isfile(options.config):
@@ -1169,7 +1157,7 @@ if __name__ == "__main__":
         if not options.setup:
             os._exit(1)
     else:
-        logging.debug("Parsing config file `%s`" % (os.path.abspath(options.config),))
+        logging.debug(f"Parsing config file `{os.path.abspath(options.config)}`")
         options.parse_config_file(options.config)
 
     # Make sure that env vars always have president over the file

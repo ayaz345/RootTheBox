@@ -65,7 +65,7 @@ class CreatePasteHandler(BaseHandler):
             name = self.get_argument("name", "")
             content = self.get_argument("content", "")
             user = self.get_current_user()
-            if 0 < len(name) and 0 < len(content):
+            if len(name) > 0 and len(content) > 0:
                 teams = []
                 if user.is_admin():
                     teamval = self.get_argument("team_uuid", "")

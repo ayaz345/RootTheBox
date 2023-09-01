@@ -113,13 +113,12 @@ class Theme(DatabaseObject):
 
     def __iter__(self):
         try:
-            for _file in self.files:
-                yield _file
+            yield from self.files
         except:
             logging.error(
-                "Session Expired - returning default theme: %s" % options.default_theme
+                f"Session Expired - returning default theme: {options.default_theme}"
             )
             if self.name == "386":
                 yield "386.js"
             else:
-                yield "%s.min.css" % self.name.lower()
+                yield f"{self.name.lower()}.min.css"

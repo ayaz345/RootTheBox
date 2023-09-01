@@ -106,9 +106,7 @@ class GameLevel(DatabaseObject):
 
     @property
     def buyout(self):
-        if self._buyout is None:
-            return 0
-        return self._buyout
+        return 0 if self._buyout is None else self._buyout
 
     @buyout.setter
     def buyout(self, value):
@@ -130,10 +128,7 @@ class GameLevel(DatabaseObject):
 
     @property
     def name(self):
-        if self._name:
-            return str(self._name)
-        else:
-            return "Level #" + str(self.number)
+        return str(self._name) if self._name else f"Level #{str(self.number)}"
 
     @name.setter
     def name(self, value):
@@ -144,13 +139,11 @@ class GameLevel(DatabaseObject):
 
     @property
     def description(self):
-        if self._description is None:
-            return ""
-        return self._description
+        return "" if self._description is None else self._description
 
     @description.setter
     def description(self, value):
-        if 512 < len(value):
+        if len(value) > 512:
             raise ValidationError("Description cannot be greater than 512 characters")
         self._description = str(value)
 
@@ -178,9 +171,7 @@ class GameLevel(DatabaseObject):
     @property
     def locked(self):
         """Determines if an admin has locked an level."""
-        if self._locked == None:
-            return False
-        return self._locked
+        return False if self._locked is None else self._locked
 
     @locked.setter
     def locked(self, value):
@@ -195,9 +186,7 @@ class GameLevel(DatabaseObject):
         self._locked = value
 
     def unlocked_boxes(self):
-        if self._locked:
-            return []
-        return [box for box in self.boxes if not box.locked]
+        return [] if self._locked else [box for box in self.boxes if not box.locked]
 
     def to_xml(self, parent):
         level_elem = ET.SubElement(parent, "gamelevel")
@@ -211,11 +200,7 @@ class GameLevel(DatabaseObject):
 
     def to_dict(self):
         """Return public data as dict"""
-        last = GameLevel.last_level(self.id)
-        if last:
-            last_level = last.number
-        else:
-            last_level = ""
+        last_level = last.number if (last := GameLevel.last_level(self.id)) else ""
         return {
             "uuid": self.uuid,
             "number": self.number,
@@ -229,19 +214,13 @@ class GameLevel(DatabaseObject):
 
     def __next__(self):
         """Return the next level, or None"""
-        if self.next_level_id is not None:
-            return self.by_id(self.next_level_id)
-        else:
-            return None
+        return None if self.next_level_id is None else self.by_id(self.next_level_id)
 
     def __str__(self):
         return "GameLevel #%d" % self.number
 
     def __cmp__(self, other):
-        if self.number < other.number:
-            return -1
-        else:
-            return 1
+        return -1 if self.number < other.number else 1
 
     def __eq__(self, other):
         return self.__cmp__(other) == 0

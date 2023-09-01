@@ -169,12 +169,11 @@ class User(DatabaseObject):
         """
         if algorithm_name is None:
             algorithm_name = DEFAULT_HASH_ALGORITHM
-        if algorithm_name in cls.algorithms:
-            algo = cls.algorithms[algorithm_name][0]()
-            algo.update(encode(password))
-            return algo.hexdigest()
-        else:
-            raise ValueError("Algorithm %s not supported." % algorithm_name)
+        if algorithm_name not in cls.algorithms:
+            raise ValueError(f"Algorithm {algorithm_name} not supported.")
+        algo = cls.algorithms[algorithm_name][0]()
+        algo.update(encode(password))
+        return algo.hexdigest()
 
     @classmethod
     def _hash_password(cls, password):
@@ -209,8 +208,7 @@ class User(DatabaseObject):
 
     @theme.setter
     def theme(self, value):
-        theme = Theme.by_name(value)
-        if theme:
+        if theme := Theme.by_name(value):
             self.theme_id = theme.id
 
     @property
@@ -307,10 +305,7 @@ class User(DatabaseObject):
         Determines if an admin has locked an account, accounts with
         administrative permissions cannot be locked.
         """
-        if self.is_admin():
-            return False  # Admin accounts cannot be locked
-        else:
-            return self._locked
+        return False if self.is_admin() else self._locked
 
     @locked.setter
     def locked(self, value):
@@ -330,74 +325,62 @@ class User(DatabaseObject):
     def avatar(self):
         if self._avatar is not None:
             return self._avatar
+        if not options.teams or options.teams and self.is_admin():
+            avatar = default_avatar("user")
         else:
-            if not options.teams:
-                avatar = default_avatar("user")
-            elif self.is_admin():
-                avatar = default_avatar("user")
-            else:
-                avatar = get_new_avatar("user")
-                if not avatar.startswith("default_"):
-                    self._avatar = avatar
-                    dbsession.add(self)
-                    dbsession.commit()
-            return avatar
+            avatar = get_new_avatar("user")
+            if not avatar.startswith("default_"):
+                self._avatar = avatar
+                dbsession.add(self)
+                dbsession.commit()
+        return avatar
 
     @avatar.setter
     def avatar(self, image_data):
-        if MIN_AVATAR_SIZE < len(image_data) < MAX_AVATAR_SIZE:
-            ext = imghdr.what("", h=image_data)
-            if ext in IMG_FORMATS and not is_xss_image(image_data):
-                try:
-                    if self._avatar is not None and os.path.exists(
-                        options.avatar_dir + "/upload/" + self._avatar
-                    ):
-                        os.unlink(options.avatar_dir + "/upload/" + self._avatar)
-                    file_path = str(
-                        options.avatar_dir + "/upload/" + self.uuid + "." + ext
-                    )
-                    image = Image.open(io.BytesIO(image_data))
-                    cover = resizeimage.resize_cover(image, [500, 250])
-                    cover.save(file_path, image.format)
-                    self._avatar = "upload/" + self.uuid + "." + ext
-                except Exception as e:
-                    raise ValidationError(e)
-            else:
-                raise ValidationError(
-                    "Invalid image format, avatar must be: %s"
-                    % (", ".join(IMG_FORMATS))
-                )
-        else:
+        if not MIN_AVATAR_SIZE < len(image_data) < MAX_AVATAR_SIZE:
             raise ValidationError(
                 "The image is too large must be %d - %d bytes"
                 % (MIN_AVATAR_SIZE, MAX_AVATAR_SIZE)
             )
+        ext = imghdr.what("", h=image_data)
+        if ext not in IMG_FORMATS or is_xss_image(image_data):
+            raise ValidationError(
+                f'Invalid image format, avatar must be: {", ".join(IMG_FORMATS)}'
+            )
+        try:
+            if self._avatar is not None and os.path.exists(
+                f"{options.avatar_dir}/upload/{self._avatar}"
+            ):
+                os.unlink(f"{options.avatar_dir}/upload/{self._avatar}")
+            file_path = str(f"{options.avatar_dir}/upload/{self.uuid}.{ext}")
+            image = Image.open(io.BytesIO(image_data))
+            cover = resizeimage.resize_cover(image, [500, 250])
+            cover.save(file_path, image.format)
+            self._avatar = f"upload/{self.uuid}.{ext}"
+        except Exception as e:
+            raise ValidationError(e)
 
     def has_item(self, item_name):
         """Check to see if a team has purchased an item"""
         item = MarketItem.by_name(item_name)
         if item is None:
-            raise ValueError("Item '%s' not in database." % str(item_name))
-        return True if self.team and item in self.team.items else False
+            raise ValueError(f"Item '{str(item_name)}' not in database.")
+        return bool(self.team and item in self.team.items)
 
     def has_permission(self, permission):
         """Return True if 'permission' is in permissions_names"""
-        return True if permission in self.permissions_names else False
+        return permission in self.permissions_names
 
     def is_admin(self):
         return self.has_permission(ADMIN_PERMISSION)
 
     def is_email_valid(self):
         emailtoken = EmailToken.by_user_id(self.id)
-        if emailtoken is None:
-            return True
-        return emailtoken.valid
+        return True if emailtoken is None else emailtoken.valid
 
     def is_expired(self):
         expired = self._expire
-        if expired and expired != "":
-            return datetime.now() > expired
-        return False
+        return datetime.now() > expired if expired and expired != "" else False
 
     def validate_email(self, token):
         emailtoken = EmailToken.by_user_id(self.id)
@@ -501,4 +484,4 @@ class User(DatabaseObject):
         return self.handle
 
     def __repr__(self):
-        return "<User - handle: %s>" % (self.handle,)
+        return f"<User - handle: {self.handle}>"

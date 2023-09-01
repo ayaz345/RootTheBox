@@ -153,10 +153,7 @@ def get_team_info(team):
 
 
 def get_team_members(team):
-    team_members = []
-    for team_member in team.members:
-        team_members.append(get_user_info(team_member))
-    return team_members
+    return [get_user_info(team_member) for team_member in team.members]
 
 
 def send_webhook(data):

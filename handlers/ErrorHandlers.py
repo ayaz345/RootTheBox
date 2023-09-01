@@ -36,22 +36,22 @@ class NotFoundHandler(BaseHandler):
 
     def put(self, *args, **kwargs):
         """Log odd behavior, this should never get legitimately called"""
-        logging.warning("%s attempted to use PUT method" % self.request.remote_ip)
+        logging.warning(f"{self.request.remote_ip} attempted to use PUT method")
         self.render("public/404.html")
 
     def delete(self, *args, **kwargs):
         """Log odd behavior, this should never get legitimately called"""
-        logging.warning("%s attempted to use DELETE method" % self.request.remote_ip)
+        logging.warning(f"{self.request.remote_ip} attempted to use DELETE method")
         self.render("public/404.html")
 
     def head(self, *args, **kwargs):
         """Log odd behavior, this should never get legitimately called"""
-        logging.warning("%s attempted to use HEAD method" % self.request.remote_ip)
+        logging.warning(f"{self.request.remote_ip} attempted to use HEAD method")
         self.render("public/404.html")
 
     def options(self, *args, **kwargs):
         """Log odd behavior, this should never get legitimately called"""
-        logging.warning("%s attempted to use OPTIONS method" % self.request.remote_ip)
+        logging.warning(f"{self.request.remote_ip} attempted to use OPTIONS method")
         self.render("public/404.html")
 
 
@@ -61,7 +61,7 @@ class UnauthorizedHandler(BaseHandler):
         self.clear_content_policy("object")
         self.add_content_policy("object", "'self'")
         try:
-            locked = bool(self.get_argument("locked", "").lower() == "true")
+            locked = self.get_argument("locked", "").lower() == "true"
         except ValueError:
             self.render("public/404.html")
             return
@@ -82,7 +82,6 @@ class NoobHandler(BaseHandler):
         if self.session is not None:
             user = self.get_current_user()
             logging.info(
-                "[NOOB ALERT] %s made a silly request, please mock him (%s)"
-                % (user.handle, self.request.remote_ip)
+                f"[NOOB ALERT] {user.handle} made a silly request, please mock him ({self.request.remote_ip})"
             )
         self.render("public/noob.html")

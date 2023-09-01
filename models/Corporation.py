@@ -77,28 +77,24 @@ class Corporation(DatabaseObject):
 
     @name.setter
     def name(self, value):
-        if not len(value) <= 32:
+        if len(value) > 32:
             raise ValidationError("Corporation name must be 0 - 32 characters")
         self._name = str(value)
 
     @property
     def description(self):
-        if self._description is None:
-            return ""
-        return self._description
+        return "" if self._description is None else self._description
 
     @description.setter
     def description(self, value):
-        if 512 < len(value):
+        if len(value) > 512:
             raise ValidationError("Description cannot be greater than 512 characters")
         self._description = str(value)
 
     @property
     def locked(self):
         """Determines if an admin has locked an corp."""
-        if self._locked == None:
-            return False
-        return self._locked
+        return False if self._locked is None else self._locked
 
     @locked.setter
     def locked(self, value):
@@ -128,7 +124,7 @@ class Corporation(DatabaseObject):
         ET.SubElement(corp_elem, "description").text = self.description
         ET.SubElement(corp_elem, "locked").text = str(self.locked)
         boxes_elem = ET.SubElement(corp_elem, "boxes")
-        boxes_elem.set("count", "%s" % str(len(self.boxes)))
+        boxes_elem.set("count", f"{len(self.boxes)}")
         for box in self.boxes:
             box.to_xml(boxes_elem)
 

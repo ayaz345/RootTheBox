@@ -56,7 +56,7 @@ def decode(s, name="utf-8", *args, **kwargs):
     codec = codecs.lookup(name)
     rv, length = codec.decode(s, *args, **kwargs)
     if not isinstance(rv, (str, bytes, bytearray)):
-        raise TypeError("Not a string or byte codec: type %s" % type(rv))
+        raise TypeError(f"Not a string or byte codec: type {type(rv)}")
     return rv
 
 
@@ -73,10 +73,7 @@ def set_type(value, basevalue):
     if type(value) == basetype:
         return value
     elif isinstance(basevalue, bool):
-        if str(value).upper() == "TRUE":
-            return True
-        else:
-            return False
+        return str(value).upper() == "TRUE"
     elif isinstance(basevalue, int):
         return int(value)
     elif type(unicode(value)) == basetype:

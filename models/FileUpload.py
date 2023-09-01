@@ -96,7 +96,7 @@ class FileUpload(DatabaseObject):
 
     @property
     def data(self):
-        with open(options.share_dir + "/" + self.uuid, "rb") as fp:
+        with open(f"{options.share_dir}/{self.uuid}", "rb") as fp:
             return decode(fp.read(), "base64")
 
     @data.setter
@@ -106,12 +106,12 @@ class FileUpload(DatabaseObject):
         if self.uuid is None:
             self.uuid = str(uuid4())
         self.byte_size = len(value)
-        with open(options.share_dir + "/" + self.uuid, "wb") as fp:
+        with open(f"{options.share_dir}/{self.uuid}", "wb") as fp:
             fp.write(str(encode(value, "base64")).encode())
 
     def delete_data(self):
-        if os.path.exists(options.share_dir + "/" + self.uuid):
-            os.unlink(options.share_dir + "/" + self.uuid)
+        if os.path.exists(f"{options.share_dir}/{self.uuid}"):
+            os.unlink(f"{options.share_dir}/{self.uuid}")
 
     def __repr__(self):
-        return "<FileUpload - name: %s, size: %s>" % (self.file_name, self.byte_size)
+        return f"<FileUpload - name: {self.file_name}, size: {self.byte_size}>"

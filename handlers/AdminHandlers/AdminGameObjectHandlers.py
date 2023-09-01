@@ -153,13 +153,12 @@ class AdminCreateHandler(BaseHandler):
             corp_desc = self.get_argument("corporation_description", "")
             if Corporation.by_name(corp_name) is not None:
                 raise ValidationError("Corporation name already exists")
-            else:
-                corporation = Corporation()
-                corporation.name = corp_name
-                corporation.description = corp_desc
-                self.dbsession.add(corporation)
-                self.dbsession.commit()
-                self.redirect("/admin/view/game_objects")
+            corporation = Corporation()
+            corporation.name = corp_name
+            corporation.description = corp_desc
+            self.dbsession.add(corporation)
+            self.dbsession.commit()
+            self.redirect("/admin/view/game_objects")
         except ValidationError as error:
             self.render("admin/create/corporation.html", errors=[str(error)])
 
@@ -170,13 +169,12 @@ class AdminCreateHandler(BaseHandler):
             cat_desc = self.get_argument("category_description", "")
             if Category.by_category(category) is not None:
                 raise ValidationError("Category already exists")
-            else:
-                new_category = Category()
-                new_category.category = category
-                new_category.description = cat_desc
-                self.dbsession.add(new_category)
-                self.dbsession.commit()
-                self.redirect("/admin/view/categories")
+            new_category = Category()
+            new_category.category = category
+            new_category.description = cat_desc
+            self.dbsession.add(new_category)
+            self.dbsession.commit()
+            self.redirect("/admin/view/categories")
         except ValidationError as error:
             self.render("admin/create/category.html", errors=[str(error)])
 
@@ -191,15 +189,14 @@ class AdminCreateHandler(BaseHandler):
                 raise ValidationError("Game level does not exist")
             else:
                 if Corporation.by_uuid(corp_uuid) is None:
-                    if len(Corporation.all()) == 0:
-                        # Create a empty Corp
-                        corporation = Corporation()
-                        corporation.name = ""
-                        self.dbsession.add(corporation)
-                        self.dbsession.commit()
-                        corp_uuid = corporation.uuid
-                    else:
+                    if len(Corporation.all()) != 0:
                         raise ValidationError("Corporation does not exist")
+                    # Create a empty Corp
+                    corporation = Corporation()
+                    corporation.name = ""
+                    self.dbsession.add(corporation)
+                    self.dbsession.commit()
+                    corp_uuid = corporation.uuid
                 corp = Corporation.by_uuid(corp_uuid)
                 level = GameLevel.by_number(game_level)
                 box = Box(corporation_id=corp.id, game_level_id=level.id)
@@ -213,10 +210,7 @@ class AdminCreateHandler(BaseHandler):
                 box.capture_message = self.get_argument("capture_message", "")
                 box.value = self.get_argument("reward", 0)
                 cat = Category.by_uuid(self.get_argument("category_uuid", ""))
-                if cat is not None:
-                    box.category_id = cat.id
-                else:
-                    box.category_id = None
+                box.category_id = cat.id if cat is not None else None
                 # Avatar
                 avatar_select = self.get_argument("box_avatar_select", "")
                 if avatar_select and len(avatar_select) > 0:
@@ -225,7 +219,7 @@ class AdminCreateHandler(BaseHandler):
                     box.avatar = self.request.files["avatar"][0]["body"]
                 self.dbsession.add(box)
                 self.dbsession.commit()
-                self.redirect("/admin/view/game_objects#%s" % box.uuid)
+                self.redirect(f"/admin/view/game_objects#{box.uuid}")
         except ValidationError as error:
             self.render("admin/create/box.html", errors=[str(error)])
 
@@ -317,14 +311,13 @@ class AdminCreateHandler(BaseHandler):
             hint = Hint(box_id=box.id)
             hint.price = self.get_argument("price", "")
             hint.description = self.get_argument("description", "")
-            flag = Flag.by_uuid(self.get_argument("flag_uuid", ""))
-            if flag:
+            if flag := Flag.by_uuid(self.get_argument("flag_uuid", "")):
                 hint.flag_id = flag.id
             else:
                 hint.flag_id = None
             self.dbsession.add(hint)
             self.dbsession.commit()
-            self.redirect("/admin/view/game_objects#%s" % box.uuid)
+            self.redirect(f"/admin/view/game_objects#{box.uuid}")
         except ValidationError as error:
             self.render("admin/create/hint.html", errors=[str(error)])
 
@@ -349,8 +342,7 @@ class AdminCreateHandler(BaseHandler):
             fl.order
             self.dbsession.add(fl)
         flag.order = len(box.flags) + 1
-        lock = Flag.by_uuid(self.get_argument("lock_uuid", ""))
-        if lock:
+        if lock := Flag.by_uuid(self.get_argument("lock_uuid", "")):
             flag.lock_id = lock.id
         else:
             flag.lock_id = None
@@ -363,7 +355,7 @@ class AdminCreateHandler(BaseHandler):
             for item in choices:
                 FlagChoice.create_choice(flag, item)
 
-        self.redirect("/admin/view/game_objects#%s" % box.uuid)
+        self.redirect(f"/admin/view/game_objects#{box.uuid}")
 
     def add_attachments(self, flag):
         """Add uploaded files as attachments to flags"""

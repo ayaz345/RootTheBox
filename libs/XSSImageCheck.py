@@ -23,7 +23,7 @@ IMG_FORMATS = ["png", "jpeg", "jpg", "gif", "bmp"]
 
 def is_xss_image(data):
     # str(char) works here for both py2 & py3
-    return all([str(char) in printable for char in data[:16]])
+    return all(str(char) in printable for char in data[:16])
 
 
 def get_new_avatar(dir, forceteam=False):
@@ -52,20 +52,20 @@ def get_new_avatar(dir, forceteam=False):
 
 def default_avatar(dir):
     if dir == "team":
-        avatar = "default_team.jpg"
+        return "default_team.jpg"
     elif dir == "user":
-        avatar = "default_user.jpg"
+        return "default_user.jpg"
     else:
-        avatar = "default_box.jpg"
-    return avatar
+        return "default_box.jpg"
 
 
 def filter_avatars(dir):
-    avatars = os.listdir(options.avatar_dir + "/" + dir)
-    avatarlist = []
-    for avatar in avatars:
-        if avatar.lower().endswith(tuple(IMG_FORMATS)):
-            avatarlist.append(dir + "/" + avatar)
+    avatars = os.listdir(f"{options.avatar_dir}/{dir}")
+    avatarlist = [
+        f"{dir}/{avatar}"
+        for avatar in avatars
+        if avatar.lower().endswith(tuple(IMG_FORMATS))
+    ]
     return sample(avatarlist, len(avatarlist))
 
 
@@ -75,14 +75,14 @@ def existing_avatars(dir):
         from models.Team import Team
 
         teams = Team.all()
-        for team in teams:
-            if team.avatar is not None and len(team.members) > 0:
-                avatars.append(team.avatar)
+        avatars.extend(
+            team.avatar
+            for team in teams
+            if team.avatar is not None and len(team.members) > 0
+        )
     else:
         from models.User import User
 
         users = User.all()
-        for user in users:
-            if user.avatar is not None:
-                avatars.append(user.avatar)
+        avatars.extend(user.avatar for user in users if user.avatar is not None)
     return avatars

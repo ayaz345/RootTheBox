@@ -46,7 +46,7 @@ def setup_database(db_name):
 
 
 def teardown_database(db_name):
-    if os.path.exists("%s.db" % db_name):
-        os.unlink("%s.db" % db_name)
+    if os.path.exists(f"{db_name}.db"):
+        os.unlink(f"{db_name}.db")
     else:
-        raise ValueError("Cannot delete test database: %s.db" % db_name)
+        raise ValueError(f"Cannot delete test database: {db_name}.db")

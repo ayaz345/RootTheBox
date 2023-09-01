@@ -146,11 +146,13 @@ class Team(DatabaseObject):
     @classmethod
     def ranks(cls):
         """Returns a list of unlocked objects in the database"""
-        ranked = []
-        for team in sorted(dbsession.query(cls).order_by(desc(cls.money)).all()):
-            if not team.locked:
-                ranked.append(team)
-        return ranked
+        return [
+            team
+            for team in sorted(
+                dbsession.query(cls).order_by(desc(cls.money)).all()
+            )
+            if not team.locked
+        ]
 
     @classmethod
     def count(cls):
@@ -186,17 +188,18 @@ class Team(DatabaseObject):
         self.game_history.append(add_flag)
 
     def get_history(self, _type=None):
-        history = []
-        for item in self.game_history:
-            if _type == "bots":
-                if item.type == "bot_count":
-                    history.append(item.to_dict())
-            elif _type == "flags":
-                if item.type == "flag_count":
-                    history.append(item.to_dict())
-            elif item.type != "flag_count" and item.type != "bot_count":
-                history.append(item.to_dict())
-        return history
+        return [
+            item.to_dict()
+            for item in self.game_history
+            if _type == "bots"
+            and item.type == "bot_count"
+            or _type != "bots"
+            and _type == "flags"
+            and item.type == "flag_count"
+            or _type != "bots"
+            and _type != "flags"
+            and item.type not in ["flag_count", "bot_count"]
+        ]
 
     @name.setter
     def name(self, value):
@@ -211,7 +214,7 @@ class Team(DatabaseObject):
 
     @motto.setter
     def motto(self, value):
-        if 32 < len(value):
+        if len(value) > 32:
             raise ValidationError("Motto must be less than 32 characters")
         else:
             self._motto = str(value)
@@ -245,47 +248,41 @@ class Team(DatabaseObject):
     def avatar(self):
         if self._avatar is not None:
             return self._avatar
-        else:
-            if options.teams:
-                avatar = get_new_avatar("team")
-            else:
-                avatar = get_new_avatar("user", True)
-            if not avatar.startswith("default_"):
-                self._avatar = avatar
-                dbsession.add(self)
-                dbsession.commit()
-            return avatar
+        avatar = (
+            get_new_avatar("team")
+            if options.teams
+            else get_new_avatar("user", True)
+        )
+        if not avatar.startswith("default_"):
+            self._avatar = avatar
+            dbsession.add(self)
+            dbsession.commit()
+        return avatar
 
     @avatar.setter
     def avatar(self, image_data):
-        if MIN_AVATAR_SIZE < len(image_data) < MAX_AVATAR_SIZE:
-            ext = imghdr.what("", h=image_data)
-            if ext in IMG_FORMATS and not is_xss_image(image_data):
-                try:
-                    if self._avatar is not None and os.path.exists(
-                        options.avatar_dir + "/upload/" + self._avatar
-                    ):
-                        os.unlink(options.avatar_dir + "/upload/" + self._avatar)
-                    file_path = str(
-                        options.avatar_dir + "/upload/" + self.uuid + "." + ext
-                    )
-                    image = Image.open(io.BytesIO(image_data))
-                    cover = resizeimage.resize_cover(image, [500, 250])
-                    cover.save(file_path, image.format)
-                    self._avatar = "upload/" + self.uuid + "." + ext
-                except Exception as e:
-                    raise ValidationError(e)
-
-            else:
-                raise ValidationError(
-                    "Invalid image format, avatar must be: %s"
-                    % (", ".join(IMG_FORMATS))
-                )
-        else:
+        if not MIN_AVATAR_SIZE < len(image_data) < MAX_AVATAR_SIZE:
             raise ValidationError(
                 "The image is too large must be %d - %d bytes"
                 % (MIN_AVATAR_SIZE, MAX_AVATAR_SIZE)
             )
+        ext = imghdr.what("", h=image_data)
+        if ext not in IMG_FORMATS or is_xss_image(image_data):
+            raise ValidationError(
+                f'Invalid image format, avatar must be: {", ".join(IMG_FORMATS)}'
+            )
+        try:
+            if self._avatar is not None and os.path.exists(
+                f"{options.avatar_dir}/upload/{self._avatar}"
+            ):
+                os.unlink(f"{options.avatar_dir}/upload/{self._avatar}")
+            file_path = str(f"{options.avatar_dir}/upload/{self.uuid}.{ext}")
+            image = Image.open(io.BytesIO(image_data))
+            cover = resizeimage.resize_cover(image, [500, 250])
+            cover.save(file_path, image.format)
+            self._avatar = f"upload/{self.uuid}.{ext}"
+        except Exception as e:
+            raise ValidationError(e)
 
     @property
     def levels(self):
@@ -314,7 +311,7 @@ class Team(DatabaseObject):
     def file_by_file_name(self, file_name):
         """Return file object based on file_name"""
         ls = self.files.filter_by(file_name=file_name)
-        return ls[0] if 0 < len(ls) else None
+        return ls[0] if len(ls) > 0 else None
 
     def to_dict(self):
         """Use for JSON related tasks; return public data only"""
@@ -333,7 +330,7 @@ class Team(DatabaseObject):
         ET.SubElement(team_elem, "motto").text = self.motto
         ET.SubElement(team_elem, "notes").text = self.notes
         users_elem = ET.SubElement(team_elem, "users")
-        users_elem.set("count", "%s" % str(len(self.members)))
+        users_elem.set("count", f"{len(self.members)}")
         for user in self.members:
             user.to_xml(users_elem)
 

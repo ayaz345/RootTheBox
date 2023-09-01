@@ -68,8 +68,8 @@ class ApplicationTest(AsyncHTTPTestCase):
         try:
             form = {"username": username, "password": password}
             self.post("/login", data=form, follow_redirects=False)
-            auth_cookie = "%s;" % self.wait()[0].headers["Set-Cookie"].split(";")[0]
-            self.cookies.append("session_id=%s" % auth_cookie)
+            auth_cookie = f'{self.wait()[0].headers["Set-Cookie"].split(";")[0]};'
+            self.cookies.append(f"session_id={auth_cookie}")
         except:
             logging.exception("Login failed")
 
@@ -81,7 +81,7 @@ class ApplicationTest(AsyncHTTPTestCase):
             data = self._form_encode(data)
         method = kwargs["method"]
         if method.upper() == "GET":
-            path = "%s?%s" % (path, data)
+            path = f"{path}?{data}"
         elif method.upper() == "POST":
             kwargs["body"] = data
         response = self.fetch(self.get_url(path), headers=self.get_headers(), **kwargs)
@@ -94,7 +94,8 @@ class ApplicationTest(AsyncHTTPTestCase):
 
     def _form_encode(self, data):
         """URLEncode parameters"""
-        _data = []
-        for name, param in list(data.items()):
-            _data.append("%s=%s" % (quote_plus(name), quote_plus(param)))
+        _data = [
+            f"{quote_plus(name)}={quote_plus(param)}"
+            for name, param in list(data.items())
+        ]
         return "&".join(_data)

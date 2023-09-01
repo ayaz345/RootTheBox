@@ -75,7 +75,7 @@ class AdminGameHandler(BaseHandler):
 
     @staticmethod
     def isOn(value):
-        return value == "on" or value == "true"
+        return value in ["on", "true"]
 
     @staticmethod
     def admin_actions(self):
@@ -107,28 +107,22 @@ class AdminGameHandler(BaseHandler):
             stop_timer
             and self.isOn(stop_timer) != self.application.settings["stop_timer"]
         ):
-            if self.isOn(stop_timer):
-                self.application.settings["stop_timer"] = True
-            else:
-                self.application.settings["stop_timer"] = False
+            self.application.settings["stop_timer"] = bool(self.isOn(stop_timer))
         if (
             suspend_reg
             and suspend_reg
             != str(self.application.settings["suspend_registration"]).lower()
         ):
-            if suspend_reg == "true":
-                self.application.settings["suspend_registration"] = True
-            elif suspend_reg == "false":
+            if suspend_reg == "false":
                 self.application.settings["suspend_registration"] = False
+            elif suspend_reg == "true":
+                self.application.settings["suspend_registration"] = True
         if (
             hide_scoreboard
             and self.isOn(hide_scoreboard)
             != self.application.settings["hide_scoreboard"]
         ):
-            if self.isOn(hide_scoreboard):
-                self.application.settings["hide_scoreboard"] = True
-            else:
-                self.application.settings["hide_scoreboard"] = False
+            self.application.settings["hide_scoreboard"] = bool(self.isOn(hide_scoreboard))
         if (
             set_timer
             and set_timer != str(self.application.settings["countdown_timer"]).lower()
@@ -246,16 +240,14 @@ class AdminSourceCodeMarketHandler(BaseHandler):
 
     def add_source_code(self):
         box = Box.by_uuid(self.get_argument("box_uuid", ""))
-        if box is not None:
-            file_count = len(self.request.files["source_archive"])
-            if "source_archive" not in self.request.files and 0 < file_count:
-                raise ValidationError("No file data")
-            else:
-                price = self.get_argument("price", "")
-                self.create_source_code(box, price)
-                self.render("admin/upgrades/source_code_market.html", errors=None)
-        else:
+        if box is None:
             raise ValidationError("The selected box does not exist")
+        file_count = len(self.request.files["source_archive"])
+        if "source_archive" not in self.request.files and file_count > 0:
+            raise ValidationError("No file data")
+        price = self.get_argument("price", "")
+        self.create_source_code(box, price)
+        self.render("admin/upgrades/source_code_market.html", errors=None)
 
     def create_source_code(self, box, price):
         """Save file data and create object in database"""
@@ -274,12 +266,11 @@ class AdminSourceCodeMarketHandler(BaseHandler):
         """Delete source code file"""
         uuid = self.get_argument("box_uuid", "")
         box = Box.by_uuid(uuid)
-        if box is not None and box.source_code is not None:
-            box.source_code.delete_data()
-            self.dbsession.delete(box.source_code)
-            self.dbsession.commit()
-        else:
+        if box is None or box.source_code is None:
             raise ValidationError("Box/source code does not exist")
+        box.source_code.delete_data()
+        self.dbsession.delete(box.source_code)
+        self.dbsession.commit()
         self.render("admin/upgrades/source_code_market.html", errors=None)
 
 
@@ -389,7 +380,7 @@ class AdminConfigurationHandler(BaseHandler):
         )
         self.config.require_email = self.get_bool("require_email", True)
         self.config.validate_email = self.get_bool("validate_email", False)
-        if self.config.validate_email and not len(options.mail_host) > 0:
+        if self.config.validate_email and len(options.mail_host) <= 0:
             errors = [
                 "Mail settings must be defined in the rootthebox.cfg to Validate Email."
             ]
@@ -464,8 +455,7 @@ class AdminGarbageCfgHandler(BaseHandler):
             self.set_header("Content-Type", "text/plain")
             self.set_header(
                 "Content-disposition",
-                "attachment; filename=%s.garbage"
-                % "".join(list(filter(lambda char: char in printable[:-38], box.name))),
+                f'attachment; filename={"".join(list(filter(lambda char: char in printable[:-38], box.name)))}.garbage',
             )
             self.set_header("Content-Length", len(data))
             self.write(data)
@@ -497,7 +487,7 @@ class AdminGitStatusHandler(BaseHandler):
                 branch = out.split("\n")
                 for line in branch:
                     if "Your branch is" in line:
-                        git = "RTB Updates: " + line
+                        git = f"RTB Updates: {line}"
                         break
             else:
                 git = out
@@ -589,7 +579,7 @@ class AdminExportHandler(BaseHandler):
                 game_elem.append(child)
                 for item in value:
                     ET.SubElement(child, "line").text = str(item)
-            elif len(str(value)) > 0:
+            elif str(value) != "":
                 ET.SubElement(game_elem, key).text = str(value)
 
     def export_game_objects(self, root):
@@ -598,15 +588,15 @@ class AdminExportHandler(BaseHandler):
         For the record, I hate XML with a passion.
         """
         levels_elem = ET.SubElement(root, "gamelevels")
-        levels_elem.set("count", "%s" % str(GameLevel.count()))
+        levels_elem.set("count", f"{str(GameLevel.count())}")
         for level in GameLevel.all()[1:]:
             level.to_xml(levels_elem)
         category_elem = ET.SubElement(root, "categories")
-        category_elem.set("count", "%s" % str(Category.count()))
+        category_elem.set("count", f"{str(Category.count())}")
         for category in Category.all():
             category.to_xml(category_elem)
         corps_elem = ET.SubElement(root, "corporations")
-        corps_elem.set("count", "%s" % str(Corporation.count()))
+        corps_elem.set("count", f"{str(Corporation.count())}")
         for corp in Corporation.all():
             corp.to_xml(corps_elem)
 

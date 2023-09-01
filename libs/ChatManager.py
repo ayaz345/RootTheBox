@@ -41,7 +41,7 @@ class ChatManager(object):
             return
         email = user.email
         if not email:
-            email = "%s@rocketchat.com" % user.uuid
+            email = f"{user.uuid}@rocketchat.com"
         account = self.rocket.users_create(
             email, user.name, password, user.handle.replace(" ", "_")
         ).json()
@@ -78,9 +78,8 @@ class ChatManager(object):
     def post_message(self, message, channel=None):
         # Send a global message
         if not channel:
-            default_channel = self.get_default_channel()
-            if default_channel:
-                channel = "#%s" % default_channel
+            if default_channel := self.get_default_channel():
+                channel = f"#{default_channel}"
         if channel:
             self.rocket.chat_post_message(channel=channel, text=message)
 
